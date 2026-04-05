@@ -372,11 +372,15 @@ For official submissions, configure the environment to use the OpenAI client. Se
 For local LLM inference without API costs:
 
 ```bash
-# Install Ollama (Linux/macOS)
+# Install Ollama (Linux/macOS/Windows)
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Start the Ollama server
-ollama serve
+# Start the Ollama server (in background)
+ollama serve &
+
+# Pull a model (in another terminal)
+ollama pull llama3.2
+```
 
 # Pull a model (in another terminal)
 ollama pull llama3.2
