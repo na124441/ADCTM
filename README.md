@@ -197,7 +197,7 @@ Combined with hardware failures to create extreme edge cases.
 
 | Task | Zones | Steps | Ambient | Failures | Description |
 |:---:|:---:|:---:|:---:|:---:|---|
-| 🟢 **Easy** | 3 | 18 | 42C | Yes | Stable workloads, no faults — establish baseline |
+| 🟢 **Easy** | 3 | 18 | 42C | No | Stable workloads, no faults — establish baseline |
 | 🟡 **Medium** | 5 | 24 | 44C | Yes | Fault injection and higher ambient pressure |
 | 🔴 **Hard** | 8 | 34 | 52C | Yes | Large state space and critical temperatures |
 
@@ -221,6 +221,32 @@ Score = 0.40 * Safety + 0.30 * Precision + 0.20 * Efficiency + 0.10 * Smoothness
 | 🌊 | **Smoothness** | **10%** | Jitter — rapid oscillation in cooling actuation |
 
 > ⚠️ **Safety is weighted highest** because a single thermal runaway can cause hardware damage. No efficiency gain justifies that risk.
+
+### 🧪 Grader Implementation
+
+The scoring logic (implemented in `grader/evaluator.py`) uses `NumPy` to perform vectorized analysis of the entire episode trajectory.
+
+#### 🧮 Metric Calculations
+
+*   **🛡️ Safety (`safety_ratio`)**: Calculated as the fraction of timesteps where **all zones** at once satisfy `T <= T_safe`. A single violation in any zone for one step reduces this score.
+*   **🎯 Precision (`target_score`)**: Measures the average deviation from the target temperature. It includes a **1.5°C deadband**; temperatures within this range of the target are treated as zero error.
+*   **⚡ Efficiency (`energy_score`)**: Derived from the mean cooling actuation across all zones and steps. Total energy cost is $1.0 - \text{mean\_cooling\_level}$.
+*   **🌊 Smoothness (`jitter_score`)**: Measures the average absolute change in control signals between consecutive steps. High jitter indicates an unstable or "nervous" controller.
+
+#### ⚖️ Normalization & Clipping
+
+All metrics are normalized to the `[0, 1]` range:
+- **Energy/Jitter**: Subtracted from 1.0 (since lower is better).
+- **Target Error**: Normalized by the target temperature and clamped.
+- **Final Score**: The weighted sum is strictly clamped to `[0.0, 1.0]` to ensure consistent leaderboard ranking.
+
+### 🔁 Determinism
+
+All episodes are seeded and reproducible.
+- Seed is passed via `/reset`
+- Identical inputs produce identical trajectories
+
+👉 Ensures fair benchmarking across agents
 
 ---
 
@@ -279,8 +305,7 @@ When any zone approaches a critical temperature, jitter penalties are **disabled
 
 ```bash
 # Clone the repository
-git clone https://github.com/na124441/ADCTMSubmisson
-cd ADCTMSubmission
+git clone https://github.com/na124441/ADCTM
 
 # Install dependencies
 pip install -r requirements.txt
@@ -298,7 +323,6 @@ docker ps -q --filter "publish=7860" | xargs -r docker stop
 # Run the server (exposes port 7860)
 docker run -p 7860:7860 adctm
 ```
-
 ---
 
 ## 🚀 Usage
@@ -344,7 +368,7 @@ while not done:
     # Simple proportional cooling policy
     actions = [min(1.0, (t - 35) / 20) for t in obs["temperatures"]]
 
-    result = requests.post(f"{BASE}/step", json={"actions": actions}).json()
+    result = requests.post(f"{BASE}/step", json={"cooling": actions}).json()
     obs, reward, done = result["observation"], result["reward"], result["done"]
 
 # Fetch final score
@@ -353,6 +377,51 @@ print(f"Final Score: {score['total']:.3f}")
 ```
 
 ---
+
+## 🏁 Submission Execution
+
+To reproduce evaluation exactly as expected in the hackathon:
+
+> ⚠️ Ensure required environment variables are set before running inference.
+
+```bash
+# Build and start the environment
+docker build -t adctm .
+docker run -p 7860:7860 adctm &
+
+# Run the agent (official evaluation entrypoint)
+python inference.py
+```
+
+### 🔍 What this does
+- Connects automatically to the local OpenEnv server (localhost:7860)
+- Runs all tasks: easy → medium → hard
+- Produces structured logs and final scores
+
+👉 This is the only command sequence required for evaluation.
+
+## 📤 Output Format
+
+The inference script prints structured logs required for evaluation:
+
+`[START] task=<task> env=ADCTM model=<model>`
+
+`[STEP] step=<n> action=cooling([...]) reward=<r> done=<bool> error=<msg|null>`
+
+`[END] success=<bool> steps=<n> score=<0-1> rewards=<comma-separated>`
+
+### ✅ Guarantees
+- Format is deterministic and consistent
+- Compatible with automated grading pipelines
+- No additional parsing required by evaluators
+
+## ⏱️ Runtime Expectations
+- Each task typically completes in < 5 seconds
+- Full evaluation (easy, medium, hard): ~15–20 seconds
+- CPU-only execution (no GPU required)
+
+👉 Suitable for fast automated evaluation
+
 
 ## 🧠 LLM Client Configuration
 
@@ -365,9 +434,20 @@ print(f"Final Score: {score['total']:.3f}")
 
 ### 🏅 Official Submission Requirement
 
-For official submissions, configure the environment to use the OpenAI client. Set `API_BASE_URL` to an OpenAI-compatible endpoint and provide a valid `HF_TOKEN`.
+The system uses an **OpenAI-compatible API interface**.
 
-### � Installing Ollama
+Set the following environment variables:
+
+```dotenv
+API_BASE_URL=<provided endpoint>
+MODEL_NAME=<provided model>
+HF_TOKEN=<provided token>
+```
+
+⚠️ These values may be configured by the evaluation environment.
+Do NOT hardcode provider-specific assumptions (OpenAI, HF, Ollama).
+
+### � 📦 Installing Ollama
 
 For local LLM inference without API costs:
 
@@ -377,10 +457,6 @@ curl -fsSL https://ollama.ai/install.sh | sh
 
 # Start the Ollama server (in background)
 ollama serve &
-
-# Pull a model (in another terminal)
-ollama pull llama3.2
-```
 
 # Pull a model (in another terminal)
 ollama pull llama3.2
@@ -409,6 +485,20 @@ HF_TOKEN=YOUR_OPENAI_API_KEY
 | ⚡ Speed | Potentially faster inference depending on hardware |
 | 📴 Offline | Works without an internet connection |
 
+### 🤖 LLM Dependency Note
+The agent uses an OpenAI-compatible API interface.
+- **Supports:** OpenAI, HuggingFace Router, Ollama (local)
+
+> [!IMPORTANT]
+> A valid API key/token is required for LLM-based inference. Evaluation assumes a working LLM endpoint.
+
+**If the LLM fails:**
+- Safe fallback actions are used
+- Execution continues without crashing
+
+👉 This ensures robust evaluation under all conditions
+
+
 ---
 
 ## 📌 API Reference
@@ -427,7 +517,7 @@ All endpoints follow the **OpenEnv** standard schema. Requests and responses are
 ```json
 // POST /step
 {
-  "actions": [0.72, 0.45, 0.88]
+  "cooling": [0.72, 0.45, 0.88]
 }
 
 // Response
@@ -516,6 +606,18 @@ The suite validates:
 - ✅ Failure-injection behaviour
 
 ---
+
+## 🛡️ Robustness Guarantees
+
+The inference pipeline is designed to be fault-tolerant:
+
+- 🔁 **Retry logic** for transient API failures
+- 🧠 **Graceful fallback** if LLM output is invalid or empty
+- 📏 **Action validation** and clamping to valid ranges [0,1]
+- ❌ **No runtime crashes** during evaluation
+
+👉 Ensures stable execution even under imperfect LLM behavior
+
 
 ## 💡 Design Philosophy
 
