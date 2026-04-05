@@ -66,7 +66,7 @@ def _ensure_initialized() -> None:
         raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
 
 
-@app.post("/reset", response_model=Observation)
+@app.post("/reset")
 def reset(
     payload: Optional[Dict[str, Any]] = Body(default=None),
     task_name: Optional[str] = Query(default=None),
@@ -115,7 +115,10 @@ def reset(
     with env_lock:
         CURRENT_SESSION = session
 
-    return session.observation
+    return {
+    "observation": session.observation.model_dump(),
+    "info": {}
+    }
 
 
 @app.post("/step")
