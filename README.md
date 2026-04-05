@@ -292,6 +292,9 @@ pip install -r requirements.txt
 # Build the image
 docker build -t adctm .
 
+# Stop any existing containers using port 7860
+docker ps -q --filter "publish=7860" | xargs -r docker stop
+
 # Run the server (exposes port 7860)
 docker run -p 7860:7860 adctm
 ```
@@ -364,6 +367,21 @@ print(f"Final Score: {score['total']:.3f}")
 
 For official submissions, configure the environment to use the OpenAI client. Set `API_BASE_URL` to an OpenAI-compatible endpoint and provide a valid `HF_TOKEN`.
 
+### � Installing Ollama
+
+For local LLM inference without API costs:
+
+```bash
+# Install Ollama (Linux/macOS)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start the Ollama server
+ollama serve
+
+# Pull a model (in another terminal)
+ollama pull llama3.2
+```
+
 ### 📄 Example `.env`
 
 ```dotenv
@@ -373,9 +391,9 @@ MODEL_NAME=gpt-4o-mini
 HF_TOKEN=YOUR_OPENAI_API_KEY
 
 # Uncomment for local Ollama development
-# API_BASE_URL=http://localhost:11434
-# MODEL_NAME=llama2
-# HF_TOKEN=
+# API_BASE_URL=http://localhost:11434/v1
+# MODEL_NAME=llama3.2
+# HF_TOKEN=ollama
 ```
 
 ### 💡 Why Ollama?
