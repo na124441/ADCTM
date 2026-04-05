@@ -230,7 +230,7 @@ The scoring logic (implemented in `grader/evaluator.py`) uses `NumPy` to perform
 
 *   **🛡️ Safety (`safety_ratio`)**: Calculated as the fraction of timesteps where **all zones** at once satisfy `T <= T_safe`. A single violation in any zone for one step reduces this score.
 *   **🎯 Precision (`target_score`)**: Measures the average deviation from the target temperature. It includes a **1.5°C deadband**; temperatures within this range of the target are treated as zero error.
-*   **⚡ Efficiency (`energy_score`)**: Derived from the mean cooling actuation across all zones and steps. Total energy cost is $1.0 - \text{mean\_cooling\_level}$.
+*   **⚡ Efficiency (`energy_score`)**: Derived from the mean cooling actuation across all zones and steps. Total energy cost is $1.0 - \text{Average Cooling Level}$.
 *   **🌊 Smoothness (`jitter_score`)**: Measures the average absolute change in control signals between consecutive steps. High jitter indicates an unstable or "nervous" controller.
 
 #### ⚖️ Normalization & Clipping
@@ -305,7 +305,8 @@ When any zone approaches a critical temperature, jitter penalties are **disabled
 
 ```bash
 # Clone the repository
-git clone https://github.com/na124441/ADCTM
+git clone https://github.com/na124441/ADCTMSubmission
+cd ADCTMSubmission
 
 # Install dependencies
 pip install -r requirements.txt
