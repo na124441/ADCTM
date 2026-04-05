@@ -8,7 +8,6 @@ and step through the thermal management simulation.
 import json
 import threading
 from typing import Any, Dict, Optional
-import requests # Added import for requests
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -163,14 +162,10 @@ def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, A
     Runs a full simulation from start to finish using a fixed cooling policy.
     Returns the final trajectory grade and performance metrics.
     """
-    # Define the base URL for the local API
-    ENV_URL = "http://localhost:7860" # Assuming the server runs on this port
-
     try:
-        # Reset the environment via API call
-        reset_response = requests.post(f"{ENV_URL}/reset", json={"task_name": task_name}, timeout=30)
-        reset_response.raise_for_status()
-        session_config = reset_response.json() # This will be the initial observation, not the full session config
+        # Directly call the reset function
+        initial_observation = reset(task_name=task_name)
+        session_config = initial_observation.model_dump() # Convert Observation to dict for consistency
         
         # We need the num_zones from the session config to create actions.
         # Since /reset returns an Observation, we need to infer num_zones from it.
@@ -186,8 +181,8 @@ def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, A
         temp_session = SimulationSession.from_task_name(task_name)
         num_zones = temp_session.config.num_zones
 
-    except requests.exceptions.RequestException as exc:
-        raise HTTPException(status_code=400, detail=f"Error resetting environment: {str(exc)}")
+    except HTTPException as exc:
+        raise HTTPException(status_code=400, detail=f"Error resetting environment: {exc.detail}")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error loading task configuration: {str(exc)}")
 
@@ -202,12 +197,10 @@ def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, A
         action = {"cooling": [cooling_level] * num_zones}
         
         try:
-            # Step the environment via API call
-            step_response = requests.post(f"{ENV_URL}/step", json=action, timeout=30)
-            step_response.raise_for_status()
-            step_result = step_response.json()
-        except requests.exceptions.RequestException as exc:
-            raise HTTPException(status_code=400, detail=f"Error stepping environment: {str(exc)}")
+            # Directly call the step function
+            step_result = step(action)
+        except HTTPException as exc:
+            raise HTTPException(status_code=400, detail=f"Error stepping environment: {exc.detail}")
 
         observations.append(step_result["observation"])
         actions.append(action)
