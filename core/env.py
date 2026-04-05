@@ -1,4 +1,4 @@
-﻿"""
+"""
 Core API Server Environment for OpenEnv Multi-Zone Cooling.
 This module defines the RESTful endpoints (using FastAPI) that expose 
 the simulation environment. It acts as the HTTP interface for agents to reset
@@ -70,7 +70,7 @@ def _ensure_initialized() -> None:
 def reset(
     payload: Optional[Dict[str, Any]] = Body(default=None),
     task_name: Optional[str] = Query(default=None),
-) -> Observation:
+) -> Dict[str, Any]:
     """
     Endpoint to load a task config and formally instantiate/reset the simulation session.
     
@@ -139,7 +139,12 @@ def step(action_dict: Dict[str, Any]) -> Dict[str, Any]:
     # Block other requests so physics simulation executes deterministically
     with env_lock:
         try:
-            return CURRENT_SESSION.step(action_dict)
+            return {
+                    "observation": {...},
+                    "reward": {"value": float},
+                    "done": true/false,
+                    "info": {}
+                    }
         except ValidationError as exc:
             # Action schema payload verification fails
             raise HTTPException(status_code=422, detail=exc.errors())
