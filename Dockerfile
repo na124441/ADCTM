@@ -1,4 +1,4 @@
-﻿# Use an official Python runtime as a parent image
+# Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
 # Set the working directory in the container
@@ -27,4 +27,4 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
 # MANDATORY: Run the application on port 7860 using uvicorn
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["python", "app.py"]
