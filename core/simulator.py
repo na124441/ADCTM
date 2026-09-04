@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from core.models import Action, Observation
 from core.paths import TASKS_DIR
 from dynamics.thermal_model import apply_transition
+from grader.evaluator import evaluate_trajectory
 from reward.reward_fn import compute_reward
 from tasks.task_config import TaskConfig
 
@@ -139,9 +140,10 @@ class SimulationSession:
         """
         if len(self.history_actions) == 0:
             return {
-                "total": 1.0,
-                "score": 1.0,
-                "metrics": {"safety": 1.0, "precision": 1.0, "efficiency": 1.0, "smoothness": 1.0}
+                "total": 0.0,
+                "score": 0.0,
+                "metrics": {"safety": 0.0, "precision": 0.0, "efficiency": 0.0, "smoothness": 0.0},
+                "status": "no_steps_executed"
             }
         details = evaluate_trajectory(self.history_obs, self.history_actions, self.config, return_details=True)
         return {

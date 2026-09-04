@@ -1,4 +1,4 @@
-﻿"""
+"""
 Security and Integrity Tests for ADCTM API Endpoints.
 Guarantees C3 remediation:
 1. Rejects injected TaskConfig parameters (e.g. safe_temperature, max_steps).
@@ -50,3 +50,24 @@ def test_reset_rejects_arbitrary_task_names(client):
 
     bad_query = client.post("/reset", params={"task_name": "../../etc/passwd"})
     assert bad_query.status_code == 422
+
+
+def test_score_rejects_zero_step_evaluation(client):
+    # Resetting the environment without taking any steps must reject /score with HTTP 400
+    client.post("/reset", json={"task_name": "easy"})
+    score_res = client.get("/score")
+    assert score_res.status_code == 400
+    assert "Cannot score an unexecuted session" in score_res.json()["detail"]
+
+
+def test_score_succeeds_after_valid_step(client):
+    client.post("/reset", json={"task_name": "easy"})
+    step_res = client.post("/step", json={"cooling": [0.4, 0.4, 0.4]})
+    assert step_res.status_code == 200
+
+    score_res = client.get("/score")
+    assert score_res.status_code == 200
+    data = score_res.json()
+    assert "total" in data
+    assert "metrics" in data
+    assert 0.0 <= data["total"] <= 1.0

@@ -191,9 +191,15 @@ def get_full_state() -> Dict[str, Any]:
 def get_score() -> Dict[str, Any]:
     """
     Computes and returns the evaluation score for the active simulation session.
+    Requires at least one simulation step to have been executed.
     """
     _ensure_initialized()
     with env_lock:
+        if len(CURRENT_SESSION.history_actions) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot score an unexecuted session. Take at least one step before requesting /score.",
+            )
         return CURRENT_SESSION.get_score()
 
 

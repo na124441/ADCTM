@@ -11,7 +11,7 @@ This document tracks the detailed engineering implementation plans for addressin
 | **C1** | Phantom Baselines Claimed in README | ✅ **Completed & Verified** |
 | **C2** | Active HuggingFace API Secret Committed to Git | ✅ **Completed & Verified** |
 | **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ✅ **Completed & Verified** |
-| **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ⏳ Pending |
+| **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ✅ **Completed & Verified** |
 | **H1** | Global Jitter Penalty Bypass Exploit | ⏳ Pending |
 | **H2** | Evaluation Metric Heavily Rewards Total Inaction | ⏳ Pending |
 | **H3** | Absence of Physical Upper Temperature Bound | ⏳ Pending |
@@ -263,3 +263,86 @@ class ResetPayload(BaseModel):
 2. **Rejection of Injected Configuration**: Test `POST /reset` with `{"safe_temperature": 9999}` or `{"max_steps": 1}`. Must return HTTP 422 Unprocessable Entity.
 3. **Rejection of Unknown Tasks**: Test `POST /reset` with `{"task_name": "malicious_task"}`. Must return HTTP 422/400.
 4. Add automated test `tests/test_api_security.py` verifying these security constraints.
+
+---
+
+### 4. Fix Plan for C4: `get_score()` Returns Perfect 1.0 Score on Zero Steps
+
+#### Overview
+In `core/simulator.py` (lines 140–145):
+```python
+if len(self.history_actions) == 0:
+    return {
+        "total": 1.0,
+        "score": 1.0,
+        "metrics": {"safety": 1.0, "precision": 1.0, "efficiency": 1.0, "smoothness": 1.0}
+    }
+```
+If a client or automated grader resets the environment and immediately calls `/score` without executing any steps, the environment awards a perfect $1.0$ (100%) score across all 4 metrics. An aborted or non-functioning agent appears as a perfect controller.
+
+#### Architecture of Solution
+```
+[Flawed Logic: Immediate 100% Score on Aborted / Zero Rollout]
+POST /reset ──> GET /score ──> Returns 1.0 (Safety: 1.0, Precision: 1.0, Energy: 1.0, Smoothness: 1.0)!
+
+                                   │
+                                   ▼  REMEDIATION
+[Defensible Engineering: Zero Rollout Cannot Be Scored]
+Option 1: Explicit HTTP 400 rejection if episode has 0 steps.
+Option 2: Return total=0.0 with 0.0 metrics and an explicit status flag "no_steps_executed".
+
+To conform with clean API standards and OpenEnv contracts:
+- In `SimulationSession.get_score()`:
+    if len(self.history_actions) == 0:
+        return {
+            "total": 0.0,
+            "score": 0.0,
+            "metrics": {"safety": 0.0, "precision": 0.0, "efficiency": 0.0, "smoothness": 0.0},
+            "status": "uninitialized"
+        }
+- In `core/env.py` `/score` endpoint:
+    If `len(CURRENT_SESSION.history_actions) == 0`:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot compute evaluation score: no simulation steps have been executed. Step the environment at least once before requesting /score."
+        )
+```
+
+#### Detailed File Changes
+
+##### 1. `core/simulator.py` (MODIFY lines 140–145)
+Update `get_score()` fallback to assign `0.0` instead of `1.0`:
+```python
+if len(self.history_actions) == 0:
+    return {
+        "total": 0.0,
+        "score": 0.0,
+        "metrics": {"safety": 0.0, "precision": 0.0, "efficiency": 0.0, "smoothness": 0.0},
+        "status": "no_steps_executed"
+    }
+```
+
+##### 2. `core/env.py` (MODIFY line 190 `/score` endpoint)
+Ensure `/score` verifies that steps were executed:
+```python
+@app.get("/score")
+def get_score() -> Dict[str, Any]:
+    """
+    Computes and returns the evaluation score for the active simulation session.
+    Requires at least one step to have been executed.
+    """
+    _ensure_initialized()
+    with env_lock:
+        if len(CURRENT_SESSION.history_actions) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot score an unexecuted session. Take at least one step before requesting /score."
+            )
+        return CURRENT_SESSION.get_score()
+```
+
+#### Verification & Testing
+1. In `tests/test_api_security.py`:
+   - Add test `test_score_rejects_zero_step_evaluation`: Reset environment, immediately query `GET /score`, assert HTTP 400 Bad Request.
+   - Step once with valid action, query `GET /score`, assert HTTP 200 and valid numeric score breakdown.
+2. Run pytest suite to ensure no regressions.

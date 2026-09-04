@@ -11,7 +11,7 @@ This document serves as the master register of all material engineering, ML/RL, 
 | **C1** | ✅ RESOLVED | ML / Claims | `README.md`, `baselines/` | Real empirical baselines trained and verified (PPO, PID, Rule-Based, LLM, Zero) |
 | **C2** | ✅ RESOLVED | Security | `.env`, `.gitignore` | Token untracked from git, sanitized with template, .gitignore & .dockerignore configured |
 | **C3** | ✅ RESOLVED | Evaluation / API | `core/env.py`, `core/models.py` | ResetPayload enforces canonical task whitelist, rejects arbitrary injected configs |
-| **C4** | 🔴 CRITICAL | Evaluation | `core/simulator.py` | `get_score()` returns perfect score (1.0) with zero actions taken |
+| **C4** | ✅ RESOLVED | Evaluation | `core/simulator.py`, `core/env.py` | /score rejects zero-step sessions with HTTP 400; get_score returns 0.0 fallback |
 | **H1** | 🟠 HIGH | RL / Reward | `reward/reward_fn.py` | Jitter penalty bypassed globally if any single zone is near safety threshold |
 | **H2** | 🟠 HIGH | Evaluation | `grader/evaluator.py`, `metrics.py` | Degenerate zero-action policy gets 30% baseline score for free (perfect energy & jitter) |
 | **H3** | 🟠 HIGH | Physics | `dynamics/thermal_model.py` | No physical upper temperature bound (temperatures can rise infinitely past destruction) |
