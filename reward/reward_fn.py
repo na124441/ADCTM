@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 
 from core.models import Action, Observation, Reward
 from tasks.task_config import TaskConfig
@@ -33,9 +33,11 @@ def compute_reward(
 
     if prev_obs.time_step > 0:
         prev_cool = np.array(prev_obs.cooling, dtype=float)
-        jitter = float(np.abs(cool - prev_cool).sum())
-        if np.max(temps) >= config.safe_temperature - config.jitter_bypass_threshold:
-            jitter = 0.0
+        zone_jitters = np.abs(cool - prev_cool)
+        danger_threshold = config.safe_temperature - config.jitter_bypass_threshold
+        danger_mask = temps >= danger_threshold
+        zone_jitters = np.where(danger_mask, 0.0, zone_jitters)
+        jitter = float(zone_jitters.sum())
     else:
         jitter = 0.0
 

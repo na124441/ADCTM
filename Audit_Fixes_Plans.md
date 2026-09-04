@@ -12,7 +12,7 @@ This document tracks the detailed engineering implementation plans for addressin
 | **C2** | Active HuggingFace API Secret Committed to Git | ✅ **Completed & Verified** |
 | **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ✅ **Completed & Verified** |
 | **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ✅ **Completed & Verified** |
-| **H1** | Global Jitter Penalty Bypass Exploit | ⏳ Pending |
+| **H1** | Global Jitter Penalty Bypass Exploit | ✅ **Completed & Verified** |
 | **H2** | Evaluation Metric Heavily Rewards Total Inaction | ⏳ Pending |
 | **H3** | Absence of Physical Upper Temperature Bound | ⏳ Pending |
 | **H4** | Zero Inter-Zone Spatial Thermal Diffusion | ⏳ Pending |
@@ -346,3 +346,72 @@ def get_score() -> Dict[str, Any]:
    - Add test `test_score_rejects_zero_step_evaluation`: Reset environment, immediately query `GET /score`, assert HTTP 400 Bad Request.
    - Step once with valid action, query `GET /score`, assert HTTP 200 and valid numeric score breakdown.
 2. Run pytest suite to ensure no regressions.
+
+---
+
+### 5. Fix Plan for H1: Global Jitter Penalty Bypass Exploit
+
+#### Overview
+In `reward/reward_fn.py` (lines 34–39):
+```python
+if prev_obs.time_step > 0:
+    prev_cool = np.array(prev_obs.cooling, dtype=float)
+    jitter = float(np.abs(cool - prev_cool).sum())
+    if np.max(temps) >= config.safe_temperature - config.jitter_bypass_threshold:
+        jitter = 0.0
+else:
+    jitter = 0.0
+```
+If **any single zone** exceeds `safe_temperature - jitter_bypass_threshold`, the entire jitter penalty is bypassed globally ($0.0$) across **all zones**.
+An intelligent RL agent can exploit this by intentionally letting a single sacrificial zone run hot (just above the threshold), which completely disables the jitter penalty across all remaining zones. The agent can then oscillate cooling wildly on the other zones without any penalty, defeating the engineering purpose of the smoothness regularization.
+
+#### Architecture of Solution
+```
+[Exploitable Global Bypass]
+Zone 1: 84°C (>= 83°C threshold)  ──> Trigger Global Bypass
+Zone 2: 60°C (Normal)             ──> Jitter penalty = 0.0 (Can oscillate wildly!)
+Zone 3: 60°C (Normal)             ──> Jitter penalty = 0.0 (Can oscillate wildly!)
+
+                               │
+                               ▼  REMEDIATION
+[Per-Zone Independent Safety Jitter Exemption]
+Calculate jitter independently for each zone i:
+    diff_i = |cool_i - prev_cool_i|
+    if temp_i >= safe_temp - threshold:
+        # Zone i is in danger: zero out jitter ONLY for zone i so emergency cooling can actuate freely
+        jitter_i = 0.0
+    else:
+        # Zone i is in nominal state: smooth control is strictly enforced
+        jitter_i = diff_i
+
+Total jitter penalty = sum(jitter_i)
+```
+
+#### Detailed File Changes
+
+##### 1. `reward/reward_fn.py` (MODIFY lines 34–40)
+Replace the scalar `np.max(temps)` global check with a vectorized per-zone mask:
+```python
+    if prev_obs.time_step > 0:
+        prev_cool = np.array(prev_obs.cooling, dtype=float)
+        zone_jitters = np.abs(cool - prev_cool)
+        # Bypassed only for zones that are individually near or exceeding the safety threshold
+        danger_threshold = config.safe_temperature - config.jitter_bypass_threshold
+        danger_mask = temps >= danger_threshold
+        zone_jitters = np.where(danger_mask, 0.0, zone_jitters)
+        jitter = float(zone_jitters.sum())
+    else:
+        jitter = 0.0
+```
+
+##### 2. `tests/reward/test_reward_fn.py` (UPDATE & ADD)
+- Update `test_compute_reward_bypasses_jitter_near_safe_limit` to verify that when all zones are hot, jitter is zeroed.
+- Add `test_compute_reward_jitter_bypass_is_per_zone`:
+  - Construct a scenario where Zone 0 is hot ($\ge 83^\circ\text{C}$), while Zone 1 is cool ($60^\circ\text{C}$).
+  - Change cooling by $0.5$ on both zones.
+  - Assert that Zone 0 pays $0.0$ jitter, but Zone 1 pays $0.5$ jitter, confirming that hot zones do not grant immunity to cool zones.
+
+#### Verification & Testing
+1. Run `pytest tests/reward/test_reward_fn.py -v`.
+2. Confirm per-zone jitter isolation prevents sacrificial zone reward hacking.
+3. Run full regression suite to ensure no unexpected breaking changes.
