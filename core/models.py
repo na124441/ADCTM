@@ -1,10 +1,10 @@
-﻿"""
+"""
 Pydantic Schemas establishing rigid object interfaces.
 Enforcing structural stability upon internal environment boundaries and
 ensuring API JSON payload parsing compliance securely.
 """
-from typing import List
-from pydantic import BaseModel, Field, conlist, field_validator, model_validator
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator, model_validator
 
 
 class Observation(BaseModel):
@@ -61,3 +61,25 @@ class InfoDict(BaseModel):
     Optional: Debugging or internal tracking info model context block payload.
     """
     step: int
+
+
+class ResetPayload(BaseModel):
+    """
+    Strict payload for resetting the environment.
+    Only permits specifying a canonical benchmark task and an optional seed.
+    Rejects arbitrary physics or threshold injection to prevent evaluation gaming.
+    """
+    task_name: str = Field("easy", description="Benchmark tier: easy, medium, or hard")
+    seed: Optional[int] = Field(None, description="Optional episode RNG seed")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("task_name")
+    @classmethod
+    def validate_canonical_task(cls, v: str) -> str:
+        clean = v.replace(".json", "").strip().lower()
+        if clean not in {"easy", "medium", "hard"}:
+            raise ValueError(
+                f"Task '{v}' is not an authorized benchmark task. Allowed: ['easy', 'medium', 'hard']"
+            )
+        return clean

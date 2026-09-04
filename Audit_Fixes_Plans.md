@@ -10,7 +10,7 @@ This document tracks the detailed engineering implementation plans for addressin
 |---|---|---|
 | **C1** | Phantom Baselines Claimed in README | ✅ **Completed & Verified** |
 | **C2** | Active HuggingFace API Secret Committed to Git | ✅ **Completed & Verified** |
-| **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ⏳ Pending |
+| **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ✅ **Completed & Verified** |
 | **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ⏳ Pending |
 | **H1** | Global Jitter Penalty Bypass Exploit | ⏳ Pending |
 | **H2** | Evaluation Metric Heavily Rewards Total Inaction | ⏳ Pending |
@@ -192,3 +192,74 @@ models/*.zip
 2. `git status`: Confirm `.env` is untracked and ignored by `.gitignore`.
 3. `grep -rn "hf_VFy" .`: Confirm no file in working tree contains the exposed secret.
 4. `test_submission_readiness.py`: Ensure test suite still imports environment cleanly using fallback tokens.
+
+---
+
+### 3. Fix Plan for C3: Evaluation Gaming via Injected TaskConfig in `/reset`
+
+#### Overview
+In `core/env.py` (lines 128–132), the `/reset` endpoint accepts an arbitrary dictionary payload:
+```python
+if config_payload is None:
+    session = SimulationSession.from_task_name(selected_task or "easy")
+else:
+    session = SimulationSession.from_dict(config_payload)
+```
+This enables an agent or attacker to submit a custom configuration (e.g. `{"safe_temperature": 9999, "max_steps": 1, ...}`) over the network, step once, and retrieve a fabricated 100% score from `/score`. The evaluation boundary has zero integrity.
+
+#### Architecture of Solution
+```
+[Insecure: Open Config Injection]
+Client POST /reset {"safe_temperature": 9999, ...} ──> SimulationSession.from_dict(...) ──> Score = 1.0!
+
+                                   │
+                                   ▼  REMEDIATION
+[Secure: Strict Whitelisted Canonical Tasks]
+Client POST /reset {"task_name": "easy", "seed": 42}
+       │
+       ▼ Validate against canonical tasks: {"easy", "medium", "hard"}
+       ├── If invalid task_name ────────> HTTP 400 "Invalid task_name. Allowed: ['easy', 'medium', 'hard']"
+       ├── If arbitrary config keys ────> HTTP 422 "Arbitrary configuration injection is forbidden on evaluation server."
+       └── If valid task & optional seed ──> Load canonical tasks/<task_name>.json safely with optional seed
+```
+
+#### Detailed File Changes
+
+##### 1. `core/models.py` (MODIFY)
+Introduce a strict, validated `ResetPayload` Pydantic model:
+```python
+class ResetPayload(BaseModel):
+    """
+    Strict payload for resetting the environment.
+    Only permits specifying a canonical task tier and an optional seed.
+    Rejects arbitrary physics or threshold overrides.
+    """
+    task_name: str = Field("easy", description="Benchmark tier: easy, medium, or hard")
+    seed: Optional[int] = Field(None, description="Optional episode RNG seed")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("task_name")
+    @classmethod
+    def validate_canonical_task(cls, v: str) -> str:
+        clean = v.replace(".json", "").lower()
+        if clean not in {"easy", "medium", "hard"}:
+            raise ValueError(f"Task '{v}' is not a valid benchmark task. Allowed: ['easy', 'medium', 'hard']")
+        return clean
+```
+
+##### 2. `core/env.py` (MODIFY lines 98–148)
+- Update `/reset` to accept `payload: Optional[ResetPayload]` or query parameters `task_name: Optional[str]`, `seed: Optional[int]`.
+- Enforce that sessions are **only** instantiated via canonical task files (`SimulationSession.from_task_name(...)`), with an optional random `seed`.
+- Completely delete the insecure `SimulationSession.from_dict(config_payload)` route from the API endpoint.
+- If a client provides custom configuration parameters other than `task_name` and `seed`, return HTTP 422.
+
+##### 3. `core/simulator.py` (MODIFY)
+- Track `task_name` and `is_canonical: bool` in `SimulationSession`.
+- Ensure `get_score()` verifies `self.is_canonical is True`.
+
+#### Verification & Testing
+1. **Legitimate Task Reset**: Test `POST /reset` with `{"task_name": "easy"}` and query parameter `?task_name=medium`. Must succeed (HTTP 200).
+2. **Rejection of Injected Configuration**: Test `POST /reset` with `{"safe_temperature": 9999}` or `{"max_steps": 1}`. Must return HTTP 422 Unprocessable Entity.
+3. **Rejection of Unknown Tasks**: Test `POST /reset` with `{"task_name": "malicious_task"}`. Must return HTTP 422/400.
+4. Add automated test `tests/test_api_security.py` verifying these security constraints.

@@ -10,7 +10,7 @@ This document serves as the master register of all material engineering, ML/RL, 
 |---|---|---|---|---|
 | **C1** | ✅ RESOLVED | ML / Claims | `README.md`, `baselines/` | Real empirical baselines trained and verified (PPO, PID, Rule-Based, LLM, Zero) |
 | **C2** | ✅ RESOLVED | Security | `.env`, `.gitignore` | Token untracked from git, sanitized with template, .gitignore & .dockerignore configured |
-| **C3** | 🔴 CRITICAL | Evaluation / API | `core/env.py`, `core/simulator.py` | `/reset` accepts arbitrary `TaskConfig` payloads allowing evaluation gaming |
+| **C3** | ✅ RESOLVED | Evaluation / API | `core/env.py`, `core/models.py` | ResetPayload enforces canonical task whitelist, rejects arbitrary injected configs |
 | **C4** | 🔴 CRITICAL | Evaluation | `core/simulator.py` | `get_score()` returns perfect score (1.0) with zero actions taken |
 | **H1** | 🟠 HIGH | RL / Reward | `reward/reward_fn.py` | Jitter penalty bypassed globally if any single zone is near safety threshold |
 | **H2** | 🟠 HIGH | Evaluation | `grader/evaluator.py`, `metrics.py` | Degenerate zero-action policy gets 30% baseline score for free (perfect energy & jitter) |

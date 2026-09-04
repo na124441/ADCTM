@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import numpy as np
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from core.models import Action, Observation
 from core.paths import TASKS_DIR
@@ -36,6 +36,8 @@ class SimulationSession:
         )
         self.step_counter = 0
         self.done = False
+        self.is_canonical = False
+        self.task_name: Optional[str] = None
         self.history_obs = [self.observation.model_dump()]
         self.history_actions = []
 
@@ -61,13 +63,22 @@ class SimulationSession:
         return cls(TaskConfig.model_validate(task_config))
 
     @classmethod
-    def from_task_name(cls, task_name: str = "easy") -> "SimulationSession":
+    def from_task_name(cls, task_name: str = "easy", seed: Optional[int] = None) -> "SimulationSession":
         """
-        Alternate syntactic constructor simplifying task injection loading dynamically resolving filenames securely.
+        Syntactic constructor loading authorized benchmark tasks from the canonical tasks directory.
         """
-        task_file = TASKS_DIR / f"{task_name.replace('.json', '')}.json"
+        clean_name = task_name.replace(".json", "").strip().lower()
+        if clean_name not in {"easy", "medium", "hard"}:
+            raise ValueError(f"Task '{task_name}' is not an authorized canonical task.")
+        task_file = TASKS_DIR / f"{clean_name}.json"
         with task_file.open(encoding="utf-8") as handle:
-            return cls.from_dict(json.load(handle))
+            cfg_dict = json.load(handle)
+        if seed is not None:
+            cfg_dict["seed"] = seed
+        session = cls.from_dict(cfg_dict)
+        session.task_name = clean_name
+        session.is_canonical = True
+        return session
 
     def step(self, action_dict: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -14,7 +14,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
-from core.models import Observation
+from core.models import Observation, ResetPayload
 from core.paths import TASKS_DIR
 from core.simulator import SimulationSession
 
@@ -99,48 +99,50 @@ def _ensure_initialized() -> None:
 def reset(
     payload: Optional[Dict[str, Any]] = Body(default=None),
     task_name: Optional[str] = Query(default=None),
+    seed: Optional[int] = Query(default=None),
 ) -> Dict[str, Any]:
     """
-    Endpoint to load a task config and formally instantiate/reset the simulation session.
+    Endpoint to load an authorized benchmark task config and formally instantiate/reset the simulation session.
+    
+    Security Contract:
+        Only canonical benchmark tiers ('easy', 'medium', 'hard') and an optional RNG seed are accepted.
+        Arbitrary configuration overrides are strictly forbidden to prevent evaluation gaming.
     
     Args:
-        payload: Optional task configuration overrides or a body containing
-                 `{"task_name": "<tier>"}`.
-        task_name: Optional task name query parameter for compatibility with
-                   external validators and inference clients.
+        payload: Optional body containing `{"task_name": "<tier>", "seed": <int>}`.
+        task_name: Optional task name query parameter.
+        seed: Optional RNG seed query parameter.
     Returns:
         Observation: The initial state observation.
     """
     global CURRENT_SESSION
 
     try:
-        config_payload = payload or None
-        selected_task = task_name
+        # Resolve task_name and seed with strict ResetPayload validation
+        parsed_payload = {}
+        if payload is not None:
+            if not isinstance(payload, dict):
+                raise HTTPException(status_code=422, detail="Reset payload must be a JSON object.")
+            # Validate through ResetPayload (enforces extra='forbid' to block parameter injection)
+            validated = ResetPayload.model_validate(payload)
+            parsed_payload["task_name"] = validated.task_name
+            parsed_payload["seed"] = validated.seed
 
-        if isinstance(config_payload, dict) and "task_name" in config_payload:
-            selected_task = str(config_payload["task_name"])
-            config_payload = {
-                key: value
-                for key, value in config_payload.items()
-                if key != "task_name"
-            } or None
+        # Query parameters take priority if provided
+        final_task = task_name if task_name is not None else parsed_payload.get("task_name", "easy")
+        final_seed = seed if seed is not None else parsed_payload.get("seed", None)
 
-        if config_payload is None:
-            session = SimulationSession.from_task_name(selected_task or "easy")
-        else:
-            # Load the custom dictionary parsed by FastAPI via Pydantic payload models.
-            session = SimulationSession.from_dict(config_payload)
+        # Validate task through ResetPayload to guarantee canonical name
+        validated_task = ResetPayload(task_name=final_task, seed=final_seed)
+        session = SimulationSession.from_task_name(validated_task.task_name, seed=validated_task.seed)
+
     except FileNotFoundError:
-        # File parsing error
-        raise HTTPException(status_code=500, detail="Default task config 'tasks/easy.json' not found.")
+        raise HTTPException(status_code=500, detail="Task configuration file not found.")
     except ValidationError as exc:
-        # Pydantic configuration validation issue
-        raise HTTPException(status_code=422, detail=exc.errors())
+        raise HTTPException(status_code=422, detail=json.loads(exc.json()))
     except ValueError as exc:
-        # Custom logic mismatch error
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # Safely lock and overwrite the global session instance locally
     with env_lock:
         CURRENT_SESSION = session
 
