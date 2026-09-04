@@ -1,0 +1,172 @@
+{
+  "tasks": {
+    "easy": {
+      "Zero (Passive)": {
+        "score_mean": 0.5356379498054569,
+        "score_std": 0.013140146723445975,
+        "safety_mean": 0.07777777777777778,
+        "target_mean": 0.6817561289811522,
+        "energy_mean": 1.0,
+        "jitter_mean": 1.0
+      },
+      "Rule-Based": {
+        "score_mean": 0.9110032135787043,
+        "score_std": 0.003993265309042839,
+        "safety_mean": 1.0,
+        "target_mean": 0.9968384138609047,
+        "energy_mean": 0.5717445278113821,
+        "jitter_mean": 0.9760278385815638
+      },
+      "PID Controller": {
+        "score_mean": 0.9045521793588662,
+        "score_std": 0.0034757908221806563,
+        "safety_mean": 1.0,
+        "target_mean": 0.9996540930366914,
+        "energy_mean": 0.5496953185440381,
+        "jitter_mean": 0.9471688773905115
+      },
+      "LLM Agent (Eval)": {
+        "score_mean": 0.9084131583933936,
+        "score_std": 0.004499939928832052,
+        "safety_mean": 1.0,
+        "target_mean": 0.9175254177659384,
+        "energy_mean": 0.6716197320762074,
+        "jitter_mean": 0.9883158664837074
+      },
+      "RL (PPO)": {
+        "score_mean": 0.8843588484623653,
+        "score_std": 0.005870126228579233,
+        "safety_mean": 1.0,
+        "target_mean": 0.9522188435294471,
+        "energy_mean": 0.5138763603788835,
+        "jitter_mean": 0.9591792332775452
+      }
+    },
+    "medium": {
+      "Zero (Passive)": {
+        "score_mean": 0.46981571228597546,
+        "score_std": 0.005894659989291675,
+        "safety_mean": 0.041666666666666664,
+        "target_mean": 0.5104968187310293,
+        "energy_mean": 1.0,
+        "jitter_mean": 1.0
+      },
+      "Rule-Based": {
+        "score_mean": 0.8694053082440355,
+        "score_std": 0.007168498536165807,
+        "safety_mean": 0.9916666666666668,
+        "target_mean": 0.9535697361707423,
+        "energy_mean": 0.44717978043751405,
+        "jitter_mean": 0.9723176463864339
+      },
+      "PID Controller": {
+        "score_mean": 0.8694634873788398,
+        "score_std": 0.0039040584043211735,
+        "safety_mean": 1.0,
+        "target_mean": 0.9852301156554677,
+        "energy_mean": 0.4033511022995963,
+        "jitter_mean": 0.9322423222228015
+      },
+      "LLM Agent (Eval)": {
+        "score_mean": 0.7449506285085828,
+        "score_std": 0.08217287904185516,
+        "safety_mean": 0.6916666666666667,
+        "target_mean": 0.872751120197837,
+        "energy_mean": 0.5415871185623227,
+        "jitter_mean": 0.9814120207010063
+      },
+      "RL (PPO)": {
+        "score_mean": 0.7755853056824475,
+        "score_std": 0.00289024130649604,
+        "safety_mean": 1.0,
+        "target_mean": 0.8414239335517119,
+        "energy_mean": 0.12184928193688391,
+        "jitter_mean": 0.9878826922955721
+      }
+    },
+    "hard": {
+      "Zero (Passive)": {
+        "score_mean": 0.32798878602000464,
+        "score_std": 0.014584639135091773,
+        "safety_mean": 0.0,
+        "target_mean": 0.0932959534000154,
+        "energy_mean": 1.0,
+        "jitter_mean": 1.0
+      },
+      "Rule-Based": {
+        "score_mean": 0.618437873836745,
+        "score_std": 0.1146817987373107,
+        "safety_mean": 0.5294117647058824,
+        "target_mean": 0.7955888689801819,
+        "energy_mean": 0.35382303355681166,
+        "jitter_mean": 0.9723190054897515
+      },
+      "PID Controller": {
+        "score_mean": 0.6688367893045027,
+        "score_std": 0.09523810049679304,
+        "safety_mean": 0.6470588235294118,
+        "target_mean": 0.9087713999784015,
+        "energy_mean": 0.2093937855913432,
+        "jitter_mean": 0.9550308278094899
+      },
+      "LLM Agent (Eval)": {
+        "score_mean": 0.6125587825616209,
+        "score_std": 0.11470904737815195,
+        "safety_mean": 0.5117647058823529,
+        "target_mean": 0.7827657943237769,
+        "energy_mean": 0.3831706416455532,
+        "jitter_mean": 0.9638903358243596
+      },
+      "RL (PPO)": {
+        "score_mean": 0.34250828287239915,
+        "score_std": 0.023804221684658507,
+        "safety_mean": 0.0,
+        "target_mean": 0.24499540397019975,
+        "energy_mean": 0.8460189992452369,
+        "jitter_mean": 0.998058618322918
+      }
+    }
+  },
+  "overall": [
+    {
+      "name": "Zero (Passive)",
+      "score": 0.4444808160371456,
+      "safety": 0.03981481481481481,
+      "target": 0.42851630037073224,
+      "energy": 1.0,
+      "jitter": 1.0
+    },
+    {
+      "name": "Rule-Based",
+      "score": 0.7996154652198282,
+      "safety": 0.840359477124183,
+      "target": 0.9153323396706097,
+      "energy": 0.4575824472685692,
+      "jitter": 0.9735548301525832
+    },
+    {
+      "name": "PID Controller",
+      "score": 0.8142841520140696,
+      "safety": 0.8823529411764706,
+      "target": 0.9645518695568537,
+      "energy": 0.38748006881165925,
+      "jitter": 0.9448140091409343
+    },
+    {
+      "name": "LLM Agent (Eval)",
+      "score": 0.7553075231545324,
+      "safety": 0.7344771241830065,
+      "target": 0.857680777429184,
+      "energy": 0.5321258307613611,
+      "jitter": 0.9778727410030245
+    },
+    {
+      "name": "RL (PPO)",
+      "score": 0.667484145672404,
+      "safety": 0.6666666666666666,
+      "target": 0.6795460603504528,
+      "energy": 0.4939148805203348,
+      "jitter": 0.9817068479653451
+    }
+  ]
+}

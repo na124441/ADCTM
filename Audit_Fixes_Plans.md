@@ -1,4 +1,4 @@
-﻿# ADCTM Audit: Remediation Plans (Audit_Fixes_Plans.md)
+# ADCTM Audit: Remediation Plans (Audit_Fixes_Plans.md)
 
 This document tracks the detailed engineering implementation plans for addressing each problem recorded in `Audit_Problems.md`. As we progress through fixing issues, actionable remediation designs, file modifications, code snippets, and verification procedures are appended here.
 
@@ -8,7 +8,7 @@ This document tracks the detailed engineering implementation plans for addressin
 
 | Problem ID | Problem Description | Plan Status |
 |---|---|---|
-| **C1** | Phantom Baselines Claimed in README | 📝 **Drafted (Below)** |
+| **C1** | Phantom Baselines Claimed in README | ✅ **Completed & Verified** |
 | **C2** | Active HuggingFace API Secret Committed to Git | ⏳ Pending |
 | **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ⏳ Pending |
 | **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ⏳ Pending |

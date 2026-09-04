@@ -276,20 +276,32 @@ When any zone approaches a critical temperature, jitter penalties are **disabled
 
 ## 🤖 Baseline Approaches
 
-| Approach | Score | Comment |
-|---|:---:|---|
-| 📏 Rule-Based | 0.45 | Overcools, brittle thresholds |
-| 🔁 PID | 0.62 | Stable but limited adaptability |
-| 💬 LLM Agent | 0.68 | Reasoning-based, no training needed |
-| 🧠 RL (PPO) | **0.81** | Best overall — learned trade-offs |
+Empirical benchmark evaluation conducted across multiple random seeds over all 3 benchmark tasks (`easy`, `medium`, `hard`) using the official 4-component composite grader:
 
-**📏 Rule-Based Controller** — Fixed threshold logic. Immediate to deploy but brittle under failure injection.
+| Approach | Overall Score | Safety (40%) | Precision (30%) | Efficiency (20%) | Smoothness (10%) | Characteristics |
+|---|:---:|:---:|:---:|:---:|:---:|---|
+| 🧊 **Zero (Passive)** | 0.44 | 0.04 | 0.43 | 1.00 | 1.00 | Passive baseline; severe overheating, zero energy expenditure |
+| 🧠 **RL (PPO)** | 0.67 | 0.67 | 0.68 | 0.49 | 0.98 | Continuous PPO policy; excels in Easy/Medium, high action stability |
+| 💬 **LLM Agent** | 0.76 | 0.73 | 0.86 | 0.53 | 0.98 | Proportional in-context policy; strong nominal tracking |
+| 📏 **Rule-Based** | 0.80 | 0.84 | 0.92 | 0.46 | 0.97 | Multi-tier threshold controller with emergency safety overrides |
+| 🔁 **PID Controller** | **0.81** | **0.88** | **0.96** | 0.39 | 0.95 | Decoupled per-zone PID with anti-windup clamping & proactive safety |
 
-**🔁 PID Controller** — Proportional-Integral-Derivative feedback per zone. Stable under nominal conditions but struggles with cross-zone coupling.
+### 🔬 Reproducing the Benchmark
 
-**🧠 Reinforcement Learning (PPO / SAC / DDPG)** — Learns a continuous control policy. Discovers non-obvious trade-offs. Top-performing approach overall.
+All controllers and training pipelines are fully reproducible with dedicated scripts:
 
-**💬 LLM-Based Agent** — Chain-of-thought reasoning over structured observations. Competitive without any training. Benefits from in-context learning.
+```bash
+# 1. Train PPO Reinforcement Learning agents on all tasks
+python train_rl.py --task all --timesteps 25000
+
+# 2. Run the multi-seed empirical benchmark across all 5 baselines
+python run_benchmark.py --episodes 5
+```
+
+- **`baselines/classical.py`**: Contains `ZeroController`, `RuleBasedController`, and `PIDController`.
+- **`core/gym_env.py`**: Farama Gymnasium environment interface (`ADCTMGymEnv`) wrapping simulation physics.
+- **`train_rl.py`**: Vectorized PPO training pipeline using Stable-Baselines3.
+- **`run_benchmark.py`**: Statistical evaluator running multi-seed rollouts and outputting `benchmark_results.json`.
 
 ---
 

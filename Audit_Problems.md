@@ -1,4 +1,4 @@
-﻿# ADCTM Audit: Problems Catalog (Audit_Problems.md)
+# ADCTM Audit: Problems Catalog (Audit_Problems.md)
 
 This document serves as the master register of all material engineering, ML/RL, physical/scientific, architectural, security, evaluation, and production issues uncovered during the adversarial audit of the **ADCTM (Autonomous Data Centre Thermal Management)** repository.
 
@@ -8,7 +8,7 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 | ID | Severity | Category | Subsystem | Brief Summary |
 |---|---|---|---|---|
-| **C1** | 🔴 CRITICAL | ML / Claims | `README.md`, `baselines/` | Phantom baselines claimed in README without code (PPO, PID, Rule-Based) |
+| **C1** | ✅ RESOLVED | ML / Claims | `README.md`, `baselines/` | Real empirical baselines trained and verified (PPO, PID, Rule-Based, LLM, Zero) |
 | **C2** | 🔴 CRITICAL | Security | `.env` | Live HuggingFace API token committed to git |
 | **C3** | 🔴 CRITICAL | Evaluation / API | `core/env.py`, `core/simulator.py` | `/reset` accepts arbitrary `TaskConfig` payloads allowing evaluation gaming |
 | **C4** | 🔴 CRITICAL | Evaluation | `core/simulator.py` | `get_score()` returns perfect score (1.0) with zero actions taken |
