@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADCTM // COMMAND CENTER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'sans-serif'], header: ['Outfit', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+        colors: { zinc: { 950: '#050507' }, brand: { primary: '#0ea5e9', glow: 'rgba(14, 165, 233, 0.15)' }, status: { success: '#10b981', warning: '#f59e0b', error: '#ef4444', ai: '#8b5cf6' } },
+        backgroundImage: { 'noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\")" }
+      }
+    }
+  }
+</script>
+<style>
+  body { background-color: #050507; color: #a1a1aa; overflow: hidden; height: 100vh; }
+  .industrial-card { background: rgba(18, 18, 22, 0.7); border: 1px solid rgba(255, 255, 255, 0.05); position: relative; overflow: hidden; backdrop-filter: blur(12px); }
+  .metric-label { font-family: 'Outfit', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #52525b; font-weight: 700; }
+  .status-dot { width: 6px; height: 6px; rounded: 50%; box-shadow: 0 0 8px currentColor; }
+  .greeble-corner { position: absolute; width: 8px; height: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); border-left: 1px solid rgba(255, 255, 255, 0.1); }
+  .btn-primary { background: #0ea5e9; color: #000; font-weight: 700; font-size: 11px; text-transform: uppercase; transition: all 0.2s; }
+  .btn-primary:hover { background: #38bdf8; box-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
+  .btn-secondary { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); font-weight: 600; font-size: 11px; text-transform: uppercase; color: #e4e4e7; }
+</style>
+</head>
+<body class="flex flex-col h-screen">
+
+<div class="absolute inset-0 opacity-10 pointer-events-none bg-noise mix-blend-overlay"></div>
+
+<!-- Header -->
+<header class="h-20 border-b border-white/5 flex items-center px-8 justify-between relative z-10 bg-zinc-950/50 backdrop-blur-md">
+  <div class="flex items-center gap-6">
+    <div class="flex flex-col">
+      <h1 class="text-xl font-header font-bold text-white tracking-tight flex items-center gap-2">
+        <span class="text-brand-primary">ADCTM</span> // COMMAND CENTER
+      </h1>
+      <div class="flex items-center gap-3 mt-1">
+        <div class="flex items-center gap-1.5">
+          <div class="status-dot text-status-success bg-status-success animate-pulse"></div>
+          <span class="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest">System Online</span>
+        </div>
+        <span id="sim-clock" class="text-[9px] font-mono text-brand-primary/80 font-bold bg-brand-primary/5 px-2 py-0.5 rounded border border-brand-primary/20">STEP: 0000</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-4 items-center">
+    <div class="flex flex-col items-end mr-4">
+      <span class="metric-label">Safety Score</span>
+      <span id="metric-safety" class="text-lg font-header font-bold text-white">--</span>
+    </div>
+    <div class="flex flex-col items-end mr-8">
+      <span class="metric-label">Efficiency</span>
+      <span id="metric-efficiency" class="text-lg font-header font-bold text-status-success">--%</span>
+    </div>
+    <select id="task-selector" class="bg-zinc-900 border border-zinc-700/50 rounded-md px-3 py-2 text-[10px] text-zinc-400 focus:outline-none focus:border-brand-primary font-bold">
+      <option value="easy">TASK: EASY</option>
+      <option value="medium">TASK: MEDIUM</option>
+      <option value="hard">TASK: HARD</option>
+    </select>
+    <button id="btn-reset" class="btn-secondary px-4 py-2 rounded-md flex items-center gap-2 hover:bg-white/5">
+      <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+      <span>Reset</span>
+    </button>
+    <button id="btn-play" class="btn-primary px-6 py-2 rounded-md flex items-center gap-2">
+      <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+      <span>Execute</span>
+    </button>
+  </div>
+</header>
+
+<!-- Main Grid -->
+<main class="flex-1 overflow-y-auto p-8 relative z-10 space-y-8">
+  
+  <!-- Dynamic Zones Grid -->
+  <section id="zones-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+    <!-- Zones will be injected here -->
+  </section>
+
+  <!-- Middle Row: Analytics & Controls -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- Chart -->
+    <div class="lg:col-span-8 industrial-card rounded-2xl p-6 h-[400px] flex flex-col">
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h3 class="font-header text-lg text-white">Dynamic Thermal Telemetry</h3>
+          <p class="text-xs text-zinc-500">Real-time sensor fusion from backend state</p>
+        </div>
+      </div>
+      <div class="flex-1 relative">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <!-- AI Control & Parameters -->
+    <div class="lg:col-span-4 flex flex-col gap-6">
+      
+      <!-- AI Agent -->
+      <div class="industrial-card rounded-2xl p-6 bg-gradient-to-br from-status-ai/10 to-transparent border-status-ai/20">
+        <div class="flex items-center gap-4 mb-4">
+           <div class="w-10 h-10 rounded-xl border border-status-ai/30 flex items-center justify-center bg-zinc-950">
+              <i data-lucide="brain-circuit" class="w-6 h-6 text-status-ai"></i>
+           </div>
+           <div>
+              <h4 class="font-header text-zinc-100 uppercase tracking-wider">Cortex Pilot</h4>
+              <div class="flex items-center gap-2 mt-1">
+                 <div id="ai-active-dot" class="w-2 h-2 rounded-full bg-zinc-700"></div>
+                 <p id="ai-status" class="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Idle</p>
+              </div>
+           </div>
+        </div>
+        <p id="ai-suggestion" class="text-xs text-zinc-400 leading-relaxed italic border-l-2 border-status-ai/30 pl-4 mb-6">
+          System monitoring initiated...
+        </p>
+        <div class="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-white/5 mb-4">
+          <span class="text-[10px] font-bold text-zinc-400 uppercase">Autonomous Mode</span>
+          <button id="btn-toggle-ai" class="w-10 h-5 bg-zinc-700 rounded-full relative transition-colors">
+            <div class="w-4 h-4 bg-white rounded-full absolute left-0.5 top-0.5 transition-all"></div>
+          </button>
+        </div>
+        <button id="btn-manual-ai" class="w-full btn-secondary py-2 hover:border-status-ai/50 transition-all">Request Single Vector</button>
+      </div>
+
+      <!-- Quick Params -->
+      <div class="industrial-card rounded-2xl p-6">
+         <h4 class="metric-label mb-4">Manual Override</h4>
+         <div class="space-y-4">
+            <div class="space-y-2">
+               <div class="flex justify-between text-[10px] font-mono">
+                 <span>Cooling Intensity</span>
+                 <span id="val-cooling" class="text-brand-primary">40%</span>
+               </div>
+               <input type="range" id="slider-cooling" class="w-full h-1 bg-zinc-800 rounded appearance-none accent-brand-primary" min="0" max="1" step="0.05" value="0.4">
+            </div>
+            <div id="terminal-mini" class="h-24 bg-black/40 rounded border border-white/5 p-3 font-mono text-[9px] overflow-y-auto space-y-1">
+               <p class="text-zinc-600">> Sequence ready.</p>
+            </div>
+         </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-8 right-8 hidden animate-in slide-in-from-bottom-4 duration-300">
+  <div class="bg-zinc-900 border border-white/10 rounded-xl px-5 py-4 shadow-2xl flex items-center gap-4">
+    <div id="toast-icon" class="w-8 h-8 rounded-lg flex items-center justify-center"></div>
+    <div>
+      <p id="toast-msg" class="text-sm font-medium text-white"></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { apiCall, updateDashboardState, showToast, createZoneCard, updateMetrics } from './ui/ui.js';
+  import { createAnalyticsChart, updateChartData } from './ui/charts.js';
+
+  let simulationInterval = null;
+  let currentState = null;
+  let isAiPilot = false;
+
+  async function sync() {
+    try {
+      const state = await apiCall('/state');
+      currentState = state;
+      updateDashboardState(state);
+      updateChartData(state.observation);
+      
+      const metrics = await apiCall('/metrics');
+      updateMetrics(metrics);
+
+      if (isAiPilot && !state.done) {
+        await executeAiStep();
+      }
+    } catch (e) {
+      stopSimulation();
+    }
+  }
+
+  async function executeAiStep() {
+    try {
+      const agent = await apiCall('/agent', 'POST', currentState.observation);
+      if (!agent.action || agent.action.length === 0) return;
+      
+      const action = { cooling: agent.action };
+      const displayVal = agent.action[0] !== undefined ? agent.action[0].toFixed(2) : '--';
+      document.getElementById('ai-suggestion').textContent = `Vector: [${displayVal}, ...]`;
+      
+      const stepData = await apiCall('/step', 'POST', action);
+      if (stepData.done) stopSimulation();
+    } catch (e) {
+      console.error('AI Step Error:', e);
+    }
+  }
+
+  async function handleReset() {
+    const task = document.getElementById('task-selector').value;
+    logTerminal(`Resetting kernel with task: ${task}`);
+    try {
+      const data = await apiCall(`/reset?task_name=${task}`, 'POST');
+      currentState = data;
+      await initZones();
+      updateDashboardState(data);
+      showToast('Environment reset successful', false);
+    } catch (e) {}
+  }
+
+  async function initZones() {
+    const grid = document.getElementById('zones-grid');
+    grid.innerHTML = '';
+    const zonesData = await apiCall('/zones');
+    for (let i = 0; i < zonesData.num_zones; i++) {
+      grid.appendChild(createZoneCard(i + 1, `NODE_${i}_DYNAMICS`));
+    }
+    lucide.createIcons();
+  }
+
+  function logTerminal(msg) {
+    const term = document.getElementById('terminal-mini');
+    const p = document.createElement('p');
+    p.className = 'text-zinc-500';
+    p.textContent = `> ${msg}`;
+    term.appendChild(p);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function startSimulation() {
+    if (simulationInterval) return;
+    simulationInterval = setInterval(sync, 1000);
+    document.getElementById('btn-play').innerHTML = '<i data-lucide="square" class="w-3.5 h-3.5"></i><span>Halt</span>';
+    lucide.createIcons();
+    logTerminal('Simulation sequence initiated.');
+  }
+
+  function stopSimulation() {
+    clearInterval(simulationInterval);
+    simulationInterval = null;
+    document.getElementById('btn-play').innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5"></i><span>Execute</span>';
+    lucide.createIcons();
+    logTerminal('Simulation sequence halted.');
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    lucide.createIcons();
+    createAnalyticsChart();
+    await handleReset();
+
+    document.getElementById('btn-reset').addEventListener('click', handleReset);
+    document.getElementById('btn-play').addEventListener('click', () => simulationInterval ? stopSimulation() : startSimulation());
+    
+    document.getElementById('slider-cooling').addEventListener('input', (e) => {
+      document.getElementById('val-cooling').textContent = `${Math.round(e.target.value * 100)}%`;
+    });
+
+    document.getElementById('btn-toggle-ai').addEventListener('click', function() {
+      isAiPilot = !isAiPilot;
+      this.classList.toggle('bg-status-ai', isAiPilot);
+      this.querySelector('div').classList.toggle('translate-x-5', isAiPilot);
+      document.getElementById('ai-active-dot').classList.toggle('bg-status-ai', isAiPilot);
+      document.getElementById('ai-active-dot').classList.toggle('animate-pulse', isAiPilot);
+      document.getElementById('ai-status').textContent = isAiPilot ? 'Pilot Engaged' : 'Idle';
+      document.getElementById('ai-status').classList.toggle('text-status-ai', isAiPilot);
+      logTerminal(isAiPilot ? 'AI Pilot authorized.' : 'AI Pilot disengaged.');
+    });
+
+    document.getElementById('btn-manual-ai').addEventListener('click', async () => {
+      if (currentState) {
+        logTerminal('Requesting AI inference...');
+        await executeAiStep();
+        await sync();
+      }
+    });
+  });
+</script>
+</body>
+</html>

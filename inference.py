@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import os
 import json
@@ -189,6 +189,18 @@ def run_task(task_name: str) -> float:
         log_end(success=success, steps=steps, score=score, rewards=rewards)
 
     return score
+
+
+def predict_action(state_or_obs: dict) -> List[float]:
+    """
+    Fallback policy mapping observation / state dict to a list of cooling floats [0.0, 1.0].
+    """
+    temps = state_or_obs.get("temperatures", [])
+    if temps:
+        target = state_or_obs.get("target_temperature", 35.0)
+        return [max(0.0, min(1.0, (t - target) / 20.0)) for t in temps]
+    num_zones = state_or_obs.get("num_zones", 3)
+    return [0.3] * num_zones
 
 
 def main():

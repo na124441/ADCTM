@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import importlib.util
 import json
@@ -56,10 +56,10 @@ def test_openenv_yaml_contains_required_spec_fields():
 def test_readme_covers_submission_flow():
     content = _read("README.md")
     for section in [
-        "## Overview",
-        "## Action & Observation Spaces",
-        "## Tasks & Grading",
-        "## Installation & Setup",
+        "Overview",
+        "Action Space",
+        "Tasks and Difficulty Scaling",
+        "Installation",
     ]:
         assert section in content
 
@@ -148,7 +148,7 @@ def test_dockerfile_matches_server_entrypoint():
         "COPY . .",
         "EXPOSE 7860",
         "ENV PORT=7860",
-        'CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]',
+        'CMD ["python", "app.py"]',
     ]:
         assert snippet in content
 

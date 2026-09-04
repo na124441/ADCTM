@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADCTM — Thermal Management Command Center</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for real-time telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --panel-bg: rgba(16, 23, 38, 0.75);
+            --panel-border: rgba(0, 212, 255, 0.15);
+            --panel-glow: rgba(0, 212, 255, 0.05);
+            --accent-cyan: #00f0ff;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 40%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Top Header */
+        header {
+            background: rgba(10, 15, 26, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #00f0ff, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4));
+        }
+
+        .brand-text h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-text span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .task-selector {
+            display: flex;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .btn-task {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-task:hover {
+            color: var(--text-main);
+        }
+
+        .btn-task.active[data-task="easy"] {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-task.active[data-task="medium"] {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--accent-yellow);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .btn-task.active[data-task="hard"] {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1.25rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: #000;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--panel-border);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: var(--accent-red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        /* Container Layout */
+        main {
+            padding: 1.5rem 2rem;
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1.5rem;
+            flex: 1;
+        }
+
+        @media (max-width: 1200px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Card Panels */
+        .glass-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent-cyan);
+        }
+
+        /* Metrics Bar */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .metric-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 0.85rem;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Zone Thermal Grid */
+        .zone-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .zone-card {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 1rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .zone-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--accent-green);
+            transition: background 0.3s;
+        }
+
+        .zone-card.warm::before { background: var(--accent-yellow); }
+        .zone-card.critical::before { background: var(--accent-red); box-shadow: 0 0 10px var(--accent-red); }
+
+        .zone-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .zone-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .zone-badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-safe { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+        .badge-warm { background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); }
+        .badge-critical { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+        .temp-display {
+            display: flex;
+            align-items: baseline;
+            gap: 0.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .temp-number {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .temp-unit {
+            font-size: 1rem;
+            color: var(--text-muted);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-val {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-main);
+        }
+
+        .cooling-control {
+            margin-top: 0.75rem;
+        }
+
+        .cooling-slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            outline: none;
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        /* Charts Container */
+        .chart-container {
+            position: relative;
+            height: 220px;
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        /* Mode Selector */
+        .control-mode-bar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mode-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .mode-option input {
+            accent-color: var(--accent-cyan);
+        }
+
+        .mode-option.active {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        /* Log Box */
+        .log-box {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            height: 120px;
+            overflow-y: auto;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .log-item {
+            margin-bottom: 0.25rem;
+            line-height: 1.4;
+        }
+
+        .log-time { color: var(--accent-purple); }
+        .log-info { color: var(--accent-cyan); }
+        .log-warn { color: var(--accent-yellow); }
+        .log-error { color: var(--accent-red); }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🌡️</div>
+            <div class="brand-text">
+                <h1>ADCTM Command Center</h1>
+                <span>Autonomous Data Centre Thermal Management</span>
+            </div>
+        </div>
+
+        <div class="task-selector">
+            <button class="btn-task active" data-task="easy" onclick="selectTask('easy')">🟢 Easy (3Z)</button>
+            <button class="btn-task" data-task="medium" onclick="selectTask('medium')">🟡 Medium (5Z)</button>
+            <button class="btn-task" data-task="hard" onclick="selectTask('hard')">🔴 Hard (8Z)</button>
+        </div>
+
+        <div class="header-controls">
+            <button class="btn btn-secondary" onclick="resetEnv()">🔄 Reset</button>
+            <button class="btn btn-secondary" onclick="stepEnv()">⏯️ Step</button>
+            <button id="btnAuto" class="btn btn-primary" onclick="toggleAutoPlay()">▶️ Auto Loop</button>
+        </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main>
+        <!-- Left Side: Thermal Zone Racks -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- KPI Summary Bar -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Step Counter</div>
+                    <div id="valStep" class="metric-value" style="color: var(--accent-cyan)">0 / 18</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Max Temp</div>
+                    <div id="valMaxTemp" class="metric-value" style="color: var(--accent-green)">38.0°C</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Step Reward</div>
+                    <div id="valReward" class="metric-value" style="color: var(--accent-purple)">0.00</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Eval Score</div>
+                    <div id="valScore" class="metric-value" style="color: var(--accent-yellow)">1.00</div>
+                </div>
+            </div>
+
+            <!-- Thermal Zones Grid -->
+            <div class="glass-panel" style="flex: 1;">
+                <div class="panel-header">
+                    <div class="panel-title">⚡ Real-Time Zone Telemetry & CRAC Controls</div>
+                    <span id="statusBadge" class="zone-badge badge-safe">ONLINE</span>
+                </div>
+                <div id="zoneContainer" class="zone-grid">
+                    <!-- Zone Cards generated dynamically -->
+                </div>
+            </div>
+
+            <!-- Controller Strategy -->
+            <div class="glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">🤖 Action Control Mode</div>
+                </div>
+                <div class="control-mode-bar">
+                    <label class="mode-option active">
+                        <input type="radio" name="controlMode" value="manual" checked onchange="updateMode()">
+                        <span>Manual Controls</span>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="controlMode" value="proportional" onchange="updateMode()">
+                        <span>Proportional AI Agent</span>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="controlMode" value="llm" onchange="updateMode()">
+                        <span>LLM Baseline Strategy</span>
+                    </label>
+                </div>
+                <div class="log-box" id="logBox">
+                    <div class="log-item"><span class="log-time">[00:00:00]</span> <span class="log-info">System initialized. Server connected.</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Real-Time Charts & Metrics -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- Temperature History Chart -->
+            <div class="glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">📈 Temperature Trajectory per Zone (°C)</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Score & Energy Chart -->
+            <div class="glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">⚡ Cooling Energy & Reward Trend</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="rewardChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Multi-Objective Breakdown -->
+            <div class="glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">🏆 Benchmark Metric Weights</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center; font-size: 0.8rem;">
+                    <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 8px;">
+                        <div style="color: var(--text-muted);">Safety (40%)</div>
+                        <div id="mSafety" style="font-weight: 700; color: var(--accent-green); margin-top: 4px;">1.00</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 8px;">
+                        <div style="color: var(--text-muted);">Precision (30%)</div>
+                        <div id="mPrecision" style="font-weight: 700; color: var(--accent-cyan); margin-top: 4px;">1.00</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 8px;">
+                        <div style="color: var(--text-muted);">Efficiency (20%)</div>
+                        <div id="mEfficiency" style="font-weight: 700; color: var(--accent-purple); margin-top: 4px;">1.00</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 8px;">
+                        <div style="color: var(--text-muted);">Smoothness (10%)</div>
+                        <div id="mSmoothness" style="font-weight: 700; color: var(--accent-yellow); margin-top: 4px;">1.00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = "http://localhost:7860";
+        let currentTask = "easy";
+        let isAutoPlaying = false;
+        let autoInterval = null;
+        let currentObs = null;
+        let stepHistory = [];
+        let tempChart, rewardChart;
+
+        // Initialize Charts
+        function initCharts() {
+            const ctxTemp = document.getElementById('tempChart').getContext('2d');
+            tempChart = new Chart(ctxTemp, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Temp °C', color: '#9ca3af' } }
+                    },
+                    plugins: { legend: { labels: { color: '#f3f4f6', font: { family: 'Outfit' } } } }
+                }
+            });
+
+            const ctxReward = document.getElementById('rewardChart').getContext('2d');
+            rewardChart = new Chart(ctxReward, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Step Reward', data: [], borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, yAxisID: 'y' },
+                        { label: 'Avg Cooling Effort', data: [], borderColor: '#00f0ff', borderDash: [5, 5], yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { position: 'left', ticks: { color: '#8b5cf6' } },
+                        y1: { position: 'right', min: 0, max: 1, ticks: { color: '#00f0ff' }, grid: { drawOnChartArea: false } }
+                    },
+                    plugins: { legend: { labels: { color: '#f3f4f6' } } }
+                }
+            });
+        }
+
+        // Add Log Entry
+        function log(msg, type = 'info') {
+            const box = document.getElementById('logBox');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span>`;
+            box.prepend(div);
+        }
+
+        // Select Task Tier
+        function selectTask(task) {
+            currentTask = task;
+            document.querySelectorAll('.btn-task').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.task === task);
+            });
+            resetEnv();
+        }
+
+        // Reset Environment
+        async function resetEnv() {
+            if (isAutoPlaying) toggleAutoPlay();
+            try {
+                const res = await fetch(`${API_BASE}/reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_name: currentTask })
+                });
+                currentObs = await res.json();
+                stepHistory = [currentObs];
+                
+                log(`Environment reset for task [${currentTask.toUpperCase()}].`, 'info');
+                renderZones(currentObs);
+                resetCharts(currentObs);
+                updateMetrics(currentObs, 0.0, 1.0);
+            } catch (err) {
+                log(`Failed to connect to API server: ${err.message}`, 'error');
+            }
+        }
+
+        // Render Zone Cards
+        function renderZones(obs) {
+            const container = document.getElementById('zoneContainer');
+            container.innerHTML = '';
+            
+            const temps = obs.temperatures || [];
+            const workloads = obs.workloads || [];
+            const cooling = obs.cooling || [];
+
+            temps.forEach((t, i) => {
+                const w = workloads[i] || 0;
+                const c = cooling[i] || 0;
+                
+                let stateClass = '';
+                let badgeClass = 'badge-safe';
+                let badgeText = 'SAFE';
+                
+                if (t >= 55.0) {
+                    stateClass = 'critical';
+                    badgeClass = 'badge-critical';
+                    badgeText = 'CRITICAL';
+                } else if (t > 42.0) {
+                    stateClass = 'warm';
+                    badgeClass = 'badge-warm';
+                    badgeText = 'WARM';
+                }
+
+                const card = document.createElement('div');
+                card.className = `zone-card ${stateClass}`;
+                card.innerHTML = `
+                    <div class="zone-header">
+                        <div class="zone-name">Zone 0${i+1}</div>
+                        <span class="zone-badge ${badgeClass}">${badgeText}</span>
+                    </div>
+                    <div class="temp-display">
+                        <span class="temp-number">${t.toFixed(1)}</span>
+                        <span class="temp-unit">°C</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Workload:</span>
+                        <span class="stat-val">${(w * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="cooling-control">
+                        <div class="cooling-slider-label">
+                            <span>CRAC Cooling</span>
+                            <span id="cLabel${i}" class="stat-val">${c.toFixed(2)}</span>
+                        </div>
+                        <input type="range" id="cSlider${i}" min="0" max="1" step="0.05" value="${c}" oninput="document.getElementById('cLabel${i}').innerText = parseFloat(this.value).toFixed(2)">
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // Step Simulation
+        async function stepEnv() {
+            if (!currentObs) return;
+
+            const mode = document.querySelector('input[name="controlMode"]:checked').value;
+            let coolingActions = [];
+
+            if (mode === 'manual') {
+                const temps = currentObs.temperatures || [];
+                temps.forEach((_, i) => {
+                    const slider = document.getElementById(`cSlider${i}`);
+                    coolingActions.push(slider ? parseFloat(slider.value) : 0.3);
+                });
+            } else if (mode === 'proportional') {
+                const temps = currentObs.temperatures || [];
+                coolingActions = temps.map(t => Math.min(1.0, Math.max(0.0, (t - 35.0) / 20.0)));
+            } else {
+                // Default moderate rule
+                const temps = currentObs.temperatures || [];
+                coolingActions = temps.map(t => (t > 40 ? 0.8 : 0.3));
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/step`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cooling: coolingActions })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    log(`Step error: ${err.detail || 'Episode finished.'}`, 'warn');
+                    if (isAutoPlaying) toggleAutoPlay();
+                    return;
+                }
+
+                const result = await res.json();
+                currentObs = result.observation;
+                stepHistory.push(currentObs);
+
+                const rewardVal = typeof result.reward === 'object' ? result.reward.value : result.reward;
+                log(`Step ${currentObs.time_step}: Action executed. Reward: ${rewardVal.toFixed(3)}`, rewardVal < -0.5 ? 'warn' : 'info');
+
+                renderZones(currentObs);
+                updateCharts(currentObs, rewardVal, coolingActions);
+                
+                // Fetch Score
+                const scoreRes = await fetch(`${API_BASE}/score`);
+                if (scoreRes.ok) {
+                    const scoreData = await scoreRes.json();
+                    updateMetrics(currentObs, rewardVal, scoreData.total || 1.0, scoreData);
+                }
+
+                if (result.done) {
+                    log(`Episode completed for task [${currentTask.toUpperCase()}].`, 'info');
+                    if (isAutoPlaying) toggleAutoPlay();
+                }
+            } catch (err) {
+                log(`Execution failed: ${err.message}`, 'error');
+                if (isAutoPlaying) toggleAutoPlay();
+            }
+        }
+
+        // Toggle Auto Play
+        function toggleAutoPlay() {
+            const btn = document.getElementById('btnAuto');
+            isAutoPlaying = !isAutoPlaying;
+
+            if (isAutoPlaying) {
+                btn.innerHTML = '⏸️ Pause';
+                btn.classList.replace('btn-primary', 'btn-danger');
+                autoInterval = setInterval(stepEnv, 600);
+            } else {
+                btn.innerHTML = '▶️ Auto Loop';
+                btn.classList.replace('btn-danger', 'btn-primary');
+                clearInterval(autoInterval);
+            }
+        }
+
+        function updateMode() {
+            const mode = document.querySelector('input[name="controlMode"]:checked').value;
+            log(`Control mode switched to [${mode.toUpperCase()}].`, 'info');
+        }
+
+        function resetCharts(obs) {
+            const numZones = obs.temperatures.length;
+            const colors = ['#00f0ff', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#3b82f6', '#14b8a6'];
+
+            tempChart.data.labels = [0];
+            tempChart.data.datasets = obs.temperatures.map((t, i) => ({
+                label: `Zone 0${i+1}`,
+                data: [t],
+                borderColor: colors[i % colors.length],
+                tension: 0.3
+            }));
+            tempChart.update();
+
+            rewardChart.data.labels = [0];
+            rewardChart.data.datasets[0].data = [0];
+            rewardChart.data.datasets[1].data = [0];
+            rewardChart.update();
+        }
+
+        function updateCharts(obs, reward, actions) {
+            tempChart.data.labels.push(obs.time_step);
+            obs.temperatures.forEach((t, i) => {
+                if (tempChart.data.datasets[i]) {
+                    tempChart.data.datasets[i].data.push(t);
+                }
+            });
+            tempChart.update();
+
+            const avgCooling = actions.reduce((a, b) => a + b, 0) / actions.length;
+            rewardChart.data.labels.push(obs.time_step);
+            rewardChart.data.datasets[0].data.push(reward);
+            rewardChart.data.datasets[1].data.push(avgCooling);
+            rewardChart.update();
+        }
+
+        function updateMetrics(obs, reward, score, scoreDetails = {}) {
+            document.getElementById('valStep').innerText = `${obs.time_step}`;
+            const maxT = Math.max(...obs.temperatures);
+            const elMax = document.getElementById('valMaxTemp');
+            elMax.innerText = `${maxT.toFixed(1)}°C`;
+            elMax.style.color = maxT > 55 ? 'var(--accent-red)' : maxT > 42 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+
+            document.getElementById('valReward').innerText = reward.toFixed(2);
+            document.getElementById('valScore').innerText = score.toFixed(3);
+
+            if (scoreDetails.metrics) {
+                document.getElementById('mSafety').innerText = (scoreDetails.metrics.safety || 1.0).toFixed(2);
+                document.getElementById('mPrecision').innerText = (scoreDetails.metrics.precision || 1.0).toFixed(2);
+                document.getElementById('mEfficiency').innerText = (scoreDetails.metrics.efficiency || 1.0).toFixed(2);
+                document.getElementById('mSmoothness').innerText = (scoreDetails.metrics.smoothness || 1.0).toFixed(2);
+            }
+        }
+
+        // Initialize on Load
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            resetEnv();
+        });
+    </script>
+</body>
+</html>

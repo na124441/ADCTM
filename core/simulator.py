@@ -1,4 +1,4 @@
-﻿"""
+"""
 Core physics simulation orchestration logic module.
 Encapsulates environment lifecycles internally managing transitions mapped continuously 
 by discrete time steps tracking iteration bounds safely.
@@ -36,6 +36,8 @@ class SimulationSession:
         )
         self.step_counter = 0
         self.done = False
+        self.history_obs = [self.observation.model_dump()]
+        self.history_actions = []
 
     def get_state(self) -> Dict[str, Any]:
         """
@@ -106,6 +108,8 @@ class SimulationSession:
         # Mutate internal state
         self.observation = new_obs
         self.step_counter += 1
+        self.history_obs.append(new_obs.model_dump())
+        self.history_actions.append(action_dict)
         
         # Compare iteration lengths defining termination boundaries securely
         self.done = self.step_counter >= self.config.max_steps
@@ -116,6 +120,28 @@ class SimulationSession:
             "reward": reward_obj.model_dump(),
             "done": self.done,
             "info": {"step": self.step_counter},
+        }
+
+    def get_score(self) -> Dict[str, Any]:
+        """
+        Calculates and returns the trajectory score breakdown for the active session.
+        """
+        if len(self.history_actions) == 0:
+            return {
+                "total": 1.0,
+                "score": 1.0,
+                "metrics": {"safety": 1.0, "precision": 1.0, "efficiency": 1.0, "smoothness": 1.0}
+            }
+        details = evaluate_trajectory(self.history_obs, self.history_actions, self.config, return_details=True)
+        return {
+            "total": details["score"],
+            "score": details["score"],
+            "metrics": {
+                "safety": details["safety"],
+                "precision": details["target"],
+                "efficiency": details["energy"],
+                "smoothness": details["jitter"]
+            }
         }
 
     def model_dump(self) -> Dict[str, Any]:

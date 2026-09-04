@@ -7,10 +7,11 @@ and step through the thermal management simulation.
 
 import json
 import threading
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
 from core.models import Observation
@@ -48,13 +49,41 @@ CURRENT_SESSION: Optional[SimulationSession] = None
 env_lock = threading.Lock()
 
 
+@app.get("/dashboard")
+@app.get("/ui")
+def get_web_dashboard():
+    """
+    Serves the interactive ADCTM Command Center Web Application.
+    """
+    web_dir = Path(__file__).resolve().parent.parent / "ui" / "web"
+    main_file = web_dir / "main_index.html"
+    index_file = web_dir / "index.html"
+    
+    if main_file.exists():
+        return FileResponse(main_file)
+    elif index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Welcome to the OpenEnv Multi-Zone Cooling API!"}
+
+
 @app.get("/")
 def read_root():
     """
     Simple health-check and root endpoint.
     Retrieving this endpoint verifies that the FastAPI server is running.
     """
-    return {"message": "Welcome to the OpenEnv Multi-Zone Cooling API!"}
+    return {"message": "Welcome to the OpenEnv Multi-Zone Cooling API!", "dashboard_url": "/dashboard"}
+
+
+@app.get("/command_center")
+def get_command_center():
+    """
+    Serves the command_center.html view.
+    """
+    cmd_file = Path(__file__).resolve().parent.parent / "ui" / "web" / "command_center.html"
+    if cmd_file.exists():
+        return FileResponse(cmd_file)
+    return {"message": "command_center.html not found."}
 
 
 def _ensure_initialized() -> None:
@@ -115,10 +144,7 @@ def reset(
     with env_lock:
         CURRENT_SESSION = session
 
-    return {
-    "observation": session.observation.model_dump(),
-    "info": {}
-    }
+    return session.observation.model_dump()
 
 
 @app.post("/step")
@@ -139,12 +165,7 @@ def step(action_dict: Dict[str, Any]) -> Dict[str, Any]:
     # Block other requests so physics simulation executes deterministically
     with env_lock:
         try:
-            return {
-                    "observation": {...},
-                    "reward": {"value": float},
-                    "done": true/false,
-                    "info": {}
-                    }
+            return CURRENT_SESSION.step(action_dict)
         except ValidationError as exc:
             # Action schema payload verification fails
             raise HTTPException(status_code=422, detail=exc.errors())
@@ -162,6 +183,16 @@ def get_full_state() -> Dict[str, Any]:
     _ensure_initialized()
     with env_lock:
         return CURRENT_SESSION.model_dump()
+
+
+@app.get("/score")
+def get_score() -> Dict[str, Any]:
+    """
+    Computes and returns the evaluation score for the active simulation session.
+    """
+    _ensure_initialized()
+    with env_lock:
+        return CURRENT_SESSION.get_score()
 
 
 @app.post("/simulate")

@@ -1,0 +1,1541 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADCTM // INDUSTRIAL COMMAND CENTER</title>
+<meta name="description" content="Next-generation industrial simulation interface for enterprise digital twins.">
+<meta name="theme-color" content="#09090b">
+
+<!-- Fonts: Outfit for headers, Inter for UI, JetBrains Mono for data -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Scripts -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'sans-serif'],
+          header: ['Outfit', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          zinc: {
+            950: '#050507', // Deeper black
+          },
+          brand: {
+            primary: '#0ea5e9',
+            secondary: '#0284c7',
+            accent: '#38bdf8',
+            glow: 'rgba(14, 165, 233, 0.15)',
+          },
+          status: {
+            success: '#10b981',
+            warning: '#f59e0b',
+            error: '#ef4444',
+            ai: '#8b5cf6',
+          }
+        },
+        backgroundImage: {
+          'grid-pattern': "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M 40 0 L 0 0 0 40' fill='none' stroke='rgba(255,255,255,0.02)' stroke-width='1'/%3E%3C/svg%3E\")",
+          'noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\")",
+        },
+        animation: {
+          'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+          'scanline-scroll': 'scanline-scroll 8s linear infinite',
+          'border-beam': 'border-beam 4s linear infinite',
+        },
+        keyframes: {
+          'pulse-glow': {
+            '0%, 100%': { boxShadow: '0 0 20px rgba(14, 165, 233, 0.1)' },
+            '50%': { boxShadow: '0 0 40px rgba(14, 165, 233, 0.25)' },
+          },
+          'scanline-scroll': {
+            '0%': { backgroundPosition: '0 0' },
+            '100%': { backgroundPosition: '0 100%' },
+          },
+          'border-beam': {
+            '100%': { offsetDistance: '100%' },
+          }
+        }
+      }
+    }
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+<script src="https://unpkg.com/lucide@latest" defer></script>
+
+<style>
+  :root {
+    --brand-primary: #0ea5e9;
+    --bg-zinc-950: #050507;
+    --border-zinc-800: rgba(39, 39, 42, 0.5);
+    --border-zinc-700: rgba(63, 63, 70, 0.4);
+    --glass-bg: rgba(9, 9, 11, 0.7);
+  }
+
+  body {
+    background-color: var(--bg-zinc-950);
+    color: #e4e4e7;
+    overflow: hidden;
+    letter-spacing: -0.01em;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-zinc-700); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--brand-primary); }
+
+  /* Industrial Glass Card */
+  .industrial-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--border-zinc-800);
+    position: relative;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+  
+  .industrial-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: theme('backgroundImage.noise');
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  .greeble-corner {
+    position: absolute;
+    width: 4px; height: 4px;
+    border: 1px solid var(--brand-primary);
+    opacity: 0.3;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-300 border border-transparent;
+  }
+  .nav-item.active {
+    @apply bg-brand-primary/10 text-brand-primary border-brand-primary/20 shadow-[0_0_20px_rgba(14,165,233,0.08)];
+  }
+  .nav-item:not(.active):hover {
+    @apply bg-white/5 text-zinc-100;
+  }
+
+  .btn-action {
+    @apply px-4 py-1.5 rounded-md text-xs font-bold transition-all duration-300 active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider;
+  }
+  .btn-primary {
+    @apply btn-action bg-brand-primary text-zinc-950 hover:bg-brand-accent hover:shadow-[0_0_25px_rgba(14,165,233,0.3)];
+  }
+  .btn-secondary {
+    @apply btn-action bg-zinc-900/50 border border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-800/80 hover:border-zinc-500;
+  }
+
+  .metric-label {
+    @apply text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500/80;
+  }
+
+  .status-dot {
+    @apply w-1.5 h-1.5 rounded-full;
+    box-shadow: 0 0 10px currentColor;
+  }
+</style>
+</head>
+
+<body class="font-sans antialiased bg-grid-pattern">
+<div class="scanline-overlay"></div>
+
+<div class="flex h-screen w-full relative z-10">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="w-64 bg-zinc-950/80 backdrop-blur-2xl border-r border-white/5 flex flex-col p-6 relative overflow-hidden">
+    <!-- Sidebar Glow Effect -->
+    <div class="absolute -top-24 -left-24 w-48 h-48 bg-brand-primary/10 blur-[100px] pointer-events-none"></div>
+
+    <div class="flex items-center gap-4 mb-12 relative">
+      <div class="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center shadow-[0_0_20px_rgba(14,165,233,0.3)] relative group">
+        <i data-lucide="shield-check" class="w-6 h-6 text-zinc-950 transition-transform duration-500 group-hover:rotate-12"></i>
+        <!-- Corner Greebles -->
+        <div class="absolute -top-1 -left-1 w-2 h-2 border-t border-l border-white/40"></div>
+        <div class="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-white/40"></div>
+      </div>
+      <div>
+        <h2 class="font-header font-bold text-xl leading-none text-white tracking-tight">ADCTM <span class="text-brand-primary text-sm align-top ml-0.5">V4</span></h2>
+        <div class="flex items-center gap-1.5 mt-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+          <p class="text-[9px] uppercase tracking-[0.25em] text-zinc-500 font-mono font-bold">System Online</p>
+        </div>
+      </div>
+    </div>
+
+    <nav class="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+      <div>
+        <div class="flex items-center justify-between px-2 mb-3">
+          <p class="metric-label">Operational</p>
+          <span class="text-[8px] font-mono text-zinc-700">SEC-01</span>
+        </div>
+        <div class="space-y-1">
+          <a href="#" id="nav-dashboard" class="nav-item active">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Dashboard Overview</span>
+          </a>
+          <a href="#" id="nav-command" class="nav-item">
+            <i data-lucide="terminal" class="w-4 h-4"></i>
+            <span>Command Center</span>
+          </a>
+          <a href="#" id="nav-analytics" class="nav-item">
+            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+            <span>Live Analysis</span>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between px-2 mb-3">
+          <p class="metric-label">AI Orchestration</p>
+          <span class="text-[8px] font-mono text-zinc-700">SEC-04</span>
+        </div>
+        <div class="space-y-1">
+          <a href="#" id="nav-tuner" class="nav-item">
+            <i data-lucide="settings-2" class="w-4 h-4"></i>
+            <span>Model Tuner</span>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between px-2 mb-3">
+          <p class="metric-label">Configuration</p>
+          <span class="text-[8px] font-mono text-zinc-700">SEC-02</span>
+        </div>
+        <div class="space-y-1">
+          <a href="#" id="nav-env" class="nav-item">
+            <i data-lucide="settings-2" class="w-4 h-4"></i>
+            <span>Environment</span>
+          </a>
+          <a href="#" id="nav-assets" class="nav-item">
+            <i data-lucide="database" class="w-4 h-4"></i>
+            <span>Asset Library</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Bottom Status Panel -->
+    <div class="mt-auto pt-6 border-t border-white/5 relative">
+      <div class="industrial-card rounded-xl p-4 bg-white/[0.02] border-white/5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] text-zinc-500 font-mono font-bold tracking-widest">UPTIME</span>
+          <span class="text-[10px] text-status-success font-mono">99.98%</span>
+        </div>
+        <div class="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden mb-3 border border-white/5">
+          <div class="bg-gradient-to-r from-brand-primary to-status-success h-full transition-all duration-1000" style="width: 100%"></div>
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="flex -space-x-2">
+            <div class="w-6 h-6 rounded-full border border-zinc-900 bg-zinc-800 flex items-center justify-center text-[8px] font-bold">AI</div>
+            <div class="w-6 h-6 rounded-full border border-zinc-900 bg-zinc-700 flex items-center justify-center text-[8px] font-bold">SYS</div>
+          </div>
+          <span class="text-[9px] text-zinc-600 font-mono">NODE: 0x4F2A</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <main class="flex-1 flex flex-col bg-zinc-950/20">
+    
+    <!-- Top Global Header -->
+    <header class="h-20 flex-shrink-0 flex items-center justify-between px-10 border-b border-white/5 bg-zinc-950/40 backdrop-blur-xl relative overflow-hidden">
+      <!-- Header Background Detail -->
+      <div class="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none"></div>
+      
+      <div class="flex items-center gap-6 relative">
+        <div class="flex flex-col">
+          <div class="flex items-center gap-2">
+            <span class="text-zinc-500 text-[10px] font-mono tracking-tighter">CMD-ROOT</span>
+            <i data-lucide="chevron-right" class="w-3 h-3 text-zinc-700"></i>
+            <span class="text-zinc-100 font-bold text-sm tracking-wide">DASHBOARD_CENTER</span>
+          </div>
+          <p class="text-[9px] text-zinc-600 font-mono mt-0.5">LOCAL_NODE_ID: <span class="text-brand-primary">SIM-0012-ALPHA</span></p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-8 relative">
+        <!-- System Heartbeat -->
+        <div class="flex items-center gap-4 bg-white/5 px-4 py-2 rounded-lg border border-white/5">
+          <div class="flex flex-col items-end">
+            <span class="text-[8px] text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">Heartbeat</span>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] font-mono text-zinc-300">ACTIVE</span>
+              <div class="flex gap-0.5 items-end h-3">
+                <div class="w-0.5 bg-brand-primary animate-[bounce_1s_infinite] h-full"></div>
+                <div class="w-0.5 bg-brand-primary animate-[bounce_1.2s_infinite] h-2"></div>
+                <div class="w-0.5 bg-brand-primary animate-[bounce_0.8s_infinite] h-2.5"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-10 w-[1px] bg-white/10"></div>
+
+        <div class="flex flex-col items-end min-w-[140px]">
+          <p class="text-[8px] text-zinc-500 font-mono font-bold tracking-[0.3em] mb-1">SIM_CHRONO</p>
+          <p class="text-xl font-mono text-white tracking-tighter leading-none" id="sim-clock">00:00:1024.7</p>
+        </div>
+
+        <div class="flex gap-3">
+          <select id="task-selector" class="bg-zinc-900 border border-zinc-700/50 rounded-md px-3 py-1.5 text-[10px] text-zinc-400 focus:outline-none focus:border-brand-primary uppercase font-bold tracking-wider">
+            <option value="easy">Level: Easy</option>
+            <option value="medium">Level: Medium</option>
+            <option value="hard">Level: Hard</option>
+          </select>
+          <button id="btn-recalibrate" class="btn-secondary flex items-center gap-2.5 px-4">
+            <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+            <span>Reset</span>
+          </button>
+          <button id="btn-execute" class="btn-primary flex items-center gap-2.5 px-5 group">
+            <i data-lucide="zap" class="w-3.5 h-3.5 transition-transform group-hover:scale-125"></i>
+            <span>Execute</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tab Container -->
+    <div id="tab-dashboard" class="tab-pane flex-1 overflow-y-auto p-6 space-y-6">
+      
+      <!-- Top Row Metrics: Dynamic Grid -->
+      <div id="dashboard-zones-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Zones will be injected here -->
+      </div>
+
+      <!-- Main Layout: Chart & Logs -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        <!-- Large Analytics Chart -->
+        <div class="xl:col-span-8 flex flex-col gap-4">
+          <div class="industrial-card rounded-2xl p-6 h-[450px] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+              <div>
+                <h3 class="font-header text-lg text-white">Thermal Dynamics Telemetry</h3>
+                <p class="text-xs text-zinc-500">Real-time sensor fusion from 124 probe points</p>
+              </div>
+              <div class="flex gap-2">
+                <select class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-400 focus:outline-none">
+                  <option>Last 60 Minutes</option>
+                  <option>Last 24 Hours</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex-1 relative">
+              <canvas id="chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Quick Parameters -->
+          <div class="industrial-card rounded-xl p-6 bg-brand-glow/5">
+            <div class="flex items-center gap-4 mb-4">
+              <i data-lucide="sliders" class="w-5 h-5 text-brand-primary"></i>
+              <h3 class="font-header text-zinc-100">Quick Configuration</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div class="space-y-2">
+                  <label class="metric-label">Cooling Load (%)</label>
+                  <input type="range" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-brand-primary">
+               </div>
+               <div class="space-y-2">
+                  <label class="metric-label">Precision Threshold</label>
+                  <div class="flex items-center gap-2">
+                    <input type="text" value="0.0042" class="flex-1 bg-zinc-900/50 border border-zinc-700 rounded px-3 py-1 text-xs font-mono text-brand-primary focus:outline-none focus:border-brand-primary">
+                  </div>
+               </div>
+               <div class="flex items-end">
+                  <button class="w-full btn-secondary text-xs uppercase tracking-widest font-bold">Recalibrate Sensors</button>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Log & AI Agent -->
+        <div class="xl:col-span-4 flex flex-col gap-6">
+          <!-- Terminal -->
+          <div class="industrial-card rounded-2xl flex flex-col h-[350px]">
+            <div class="px-5 py-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/40">
+              <div class="flex items-center gap-2">
+                <div class="flex gap-1">
+                  <div class="w-2 h-2 rounded-full bg-zinc-700"></div>
+                  <div class="w-2 h-2 rounded-full bg-zinc-700"></div>
+                  <div class="w-2 h-2 rounded-full bg-zinc-700"></div>
+                </div>
+                <span class="text-[10px] uppercase font-bold text-zinc-500 ml-2">Kernel Stream</span>
+              </div>
+              <span class="text-[9px] font-mono text-zinc-600">v4.2.0-STABLE</span>
+            </div>
+            <div id="kernel-log" class="flex-1 p-4 font-mono text-[11px] space-y-2 overflow-y-auto leading-relaxed">
+              <p><span class="text-zinc-600 mr-2">[14:02:11]</span> <span class="text-brand-primary uppercase">Initializing</span> Secure environment handshake...</p>
+              <p><span class="text-zinc-600 mr-2">[14:02:12]</span> <span class="text-status-success">Connected</span> Master node at 192.168.1.104</p>
+              <p><span class="text-zinc-600 mr-2">[14:02:15]</span> <span class="text-status-warning">Warning</span> Latency spikes detected on Zone 3.</p>
+              <p><span class="text-zinc-600 mr-2">[14:02:18]</span> <span class="text-status-ai">Agent</span> Recalculating cooling vectors for Delta-4.</p>
+              <p><span class="text-zinc-600 mr-2">[14:02:22]</span> <span class="text-status-ai">Agent</span> Policy updated (Mode: Efficiency).</p>
+              <p><span class="text-zinc-600 mr-2">[14:02:25]</span> <span class="text-zinc-200 italic shadow-sm">Waiting for packet stream...</span><span class="animate-pulse">_</span></p>
+            </div>
+          </div>
+
+          <!-- AI Agent Card -->
+          <div class="industrial-card rounded-2xl p-6 bg-gradient-to-br from-status-ai/10 to-transparent border-status-ai/20 shadow-[0_0_30px_rgba(139,92,246,0.05)]">
+             <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full border border-status-ai/30 flex items-center justify-center bg-zinc-950">
+                   <i data-lucide="brain-circuit" class="w-6 h-6 text-status-ai"></i>
+                </div>
+                <div>
+                   <h4 class="font-header text-zinc-100 leading-none">CORTEX AI</h4>
+                   <p class="text-[10px] text-status-ai uppercase font-bold mt-1">Status: Active Reasoning</p>
+                </div>
+             </div>
+             <p class="text-sm text-zinc-400 leading-relaxed italic border-l-2 border-status-ai/30 pl-4 py-1">
+               "Detecting 14% efficiency drop in Zone 4. Proposed mitigation: Increment fluid pressure by 0.5 bar and enable predictive throttling."
+             </p>
+             <div class="mt-6 flex gap-2">
+                <button id="btn-ai-action" class="flex-1 px-3 py-1.5 rounded bg-status-ai/20 text-status-ai text-xs font-bold border border-status-ai/40 hover:bg-status-ai/30 transition-colors uppercase">Approve Action</button>
+             </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Command Center Tab -->
+    <div id="tab-command" class="tab-pane hidden flex-1 overflow-y-auto p-6 space-y-8">
+      <!-- Dynamic Zones Grid -->
+      <section id="zones-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <!-- Zones will be injected here -->
+      </section>
+
+      <!-- Middle Row: Analytics & Controls -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- AI Control & Parameters -->
+        <div class="lg:col-span-4 flex flex-col gap-6">
+          <!-- AI Agent -->
+          <div class="industrial-card rounded-2xl p-6 bg-gradient-to-br from-status-ai/10 to-transparent border-status-ai/20">
+            <div class="flex items-center gap-4 mb-4">
+               <div class="w-10 h-10 rounded-xl border border-status-ai/30 flex items-center justify-center bg-zinc-950">
+                  <i data-lucide="brain-circuit" class="w-6 h-6 text-status-ai"></i>
+               </div>
+               <div>
+                  <h4 class="font-header text-zinc-100 uppercase tracking-wider text-sm">Cortex Pilot</h4>
+                  <div class="flex items-center gap-2 mt-1">
+                     <div id="ai-active-dot-cmd" class="w-2 h-2 rounded-full bg-zinc-700"></div>
+                     <p id="ai-status-cmd" class="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Idle</p>
+                  </div>
+               </div>
+            </div>
+            <p id="ai-suggestion-cmd" class="text-[11px] text-zinc-400 leading-relaxed italic border-l-2 border-status-ai/30 pl-4 mb-6">
+              System monitoring initiated...
+            </p>
+            <div class="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-white/5 mb-4">
+              <span class="text-[10px] font-bold text-zinc-400 uppercase">Autonomous Mode</span>
+              <button id="btn-toggle-ai-cmd" class="w-10 h-5 bg-zinc-700 rounded-full relative transition-colors">
+                <div class="w-4 h-4 bg-white rounded-full absolute left-0.5 top-0.5 transition-all"></div>
+              </button>
+            </div>
+            <button id="btn-manual-ai-cmd" class="w-full btn-secondary py-2 hover:border-status-ai/50 transition-all text-[10px]">Request Single Vector</button>
+          </div>
+
+          <!-- Quick Params -->
+          <div class="industrial-card rounded-2xl p-6">
+             <h4 class="metric-label mb-4">Manual Override</h4>
+             <div class="space-y-4">
+                <div class="space-y-2">
+                   <div class="flex justify-between text-[10px] font-mono">
+                     <span>Cooling Intensity</span>
+                     <span id="val-cooling-cmd" class="text-brand-primary">40%</span>
+                   </div>
+                   <input type="range" id="slider-cooling-cmd" class="w-full h-1 bg-zinc-800 rounded appearance-none accent-brand-primary" min="0" max="1" step="0.05" value="0.4">
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Summary Metrics -->
+        <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div class="industrial-card rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+              <span class="metric-label mb-2">Safety Score</span>
+              <span id="metric-safety-cmd" class="text-6xl font-header font-bold text-white tracking-tighter">--</span>
+           </div>
+           <div class="industrial-card rounded-2xl p-8 flex flex-col items-center justify-center text-center border-status-success/20">
+              <span class="metric-label mb-2">Efficiency Target</span>
+              <span id="metric-efficiency-cmd" class="text-6xl font-header font-bold text-status-success tracking-tighter">--%</span>
+           </div>
+        </div>
+      </div>
+    </div>
+    <!-- Live Analysis Tab -->
+    <div id="tab-analytics" class="tab-pane hidden flex-1 overflow-y-auto p-8 space-y-10 max-w-[1700px] mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-10">
+          <div>
+            <h2 class="font-header text-4xl text-white tracking-tight">Telemetry Labs</h2>
+            <p class="text-zinc-500 text-sm mt-2 font-mono uppercase tracking-[0.2em]">Deep-tissue thermal analysis & agent policy mapping</p>
+          </div>
+          <div class="flex gap-4">
+             <div class="bg-zinc-950/60 border border-white/5 px-6 py-3 rounded-2xl flex items-center gap-4">
+                <div class="flex flex-col items-end">
+                    <span class="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">Network_Sync</span>
+                    <span class="text-xs font-mono text-status-success">SYNCHRONIZED</span>
+                </div>
+                <div class="w-2 h-8 bg-status-success/10 rounded-full overflow-hidden flex flex-col justify-end">
+                    <div class="w-full bg-status-success h-2/3 animate-pulse"></div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Real-time Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="industrial-card rounded-[1.5rem] p-6 group hover:border-status-success/30 transition-all">
+             <div class="flex justify-between items-start mb-4">
+                <div class="w-10 h-10 rounded-xl bg-status-success/10 flex items-center justify-center border border-status-success/20">
+                    <i data-lucide="activity" class="w-5 h-5 text-status-success"></i>
+                </div>
+                <span class="text-[9px] font-mono text-zinc-600">RT_METRIC_01</span>
+             </div>
+             <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Mean Temperature</p>
+             <h4 id="stat-mean-temp-large" class="text-3xl font-header font-bold text-white tracking-tighter">--.-°C</h4>
+          </div>
+
+          <div class="industrial-card rounded-[1.5rem] p-6 group hover:border-brand-primary/30 transition-all">
+             <div class="flex justify-between items-start mb-4">
+                <div class="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center border border-brand-primary/20">
+                    <i data-lucide="zap" class="w-5 h-5 text-brand-primary"></i>
+                </div>
+                <span class="text-[9px] font-mono text-zinc-600">RT_METRIC_02</span>
+             </div>
+             <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">System Efficiency</p>
+             <h4 id="stat-efficiency-large" class="text-3xl font-header font-bold text-white tracking-tighter">--%</h4>
+          </div>
+
+          <div class="industrial-card rounded-[1.5rem] p-6 group hover:border-status-ai/30 transition-all">
+             <div class="flex justify-between items-start mb-4">
+                <div class="w-10 h-10 rounded-xl bg-status-ai/10 flex items-center justify-center border border-status-ai/20">
+                    <i data-lucide="wind" class="w-5 h-5 text-status-ai"></i>
+                </div>
+                <span class="text-[9px] font-mono text-zinc-600">RT_METRIC_03</span>
+             </div>
+             <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Airflow Velocity</p>
+             <h4 class="text-3xl font-header font-bold text-white tracking-tighter">12.4 <span class="text-xs text-zinc-600">m/s</span></h4>
+          </div>
+
+          <div class="industrial-card rounded-[1.5rem] p-6 group hover:border-status-error/30 transition-all">
+             <div class="flex justify-between items-start mb-4">
+                <div class="w-10 h-10 rounded-xl bg-status-error/10 flex items-center justify-center border border-status-error/20">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-status-error"></i>
+                </div>
+                <span class="text-[9px] font-mono text-zinc-600">RT_METRIC_04</span>
+             </div>
+             <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Peak Hotspot</p>
+             <h4 id="stat-peak-temp-large" class="text-3xl font-header font-bold text-status-error tracking-tighter">--.-°C</h4>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <!-- Left Column: Thermal Distribution -->
+          <div class="lg:col-span-8 space-y-8">
+            <div class="industrial-card rounded-[2.5rem] p-10 bg-zinc-950/40 border-white/10 relative overflow-hidden">
+              <div class="absolute -top-20 -left-20 w-64 h-64 bg-status-success/5 blur-[120px] pointer-events-none"></div>
+              
+              <div class="flex justify-between items-center mb-10">
+                <div>
+                  <h3 class="font-header text-2xl text-white font-bold">Spatial Thermal Gradient</h3>
+                  <p class="text-sm text-zinc-500 mt-1">Cross-sectional node temperature distribution</p>
+                </div>
+                <div class="flex items-center gap-6">
+                  <div class="flex items-center gap-2">
+                    <span class="status-dot bg-status-success"></span>
+                    <span class="text-[10px] text-zinc-400 font-mono uppercase tracking-widest">Normal</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="status-dot bg-status-error animate-pulse"></span>
+                    <span class="text-[10px] text-zinc-400 font-mono uppercase tracking-widest">Hotspot</span>
+                  </div>
+                </div>
+              </div>
+
+              <div id="thermal-heatmap" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 aspect-[21/9]">
+                <!-- Heatmap cells injected here -->
+              </div>
+              
+              <div class="mt-10 pt-10 border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div class="space-y-2">
+                      <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Gradient Delta</p>
+                      <p class="text-lg font-mono text-white">+1.2° <span class="text-[10px] text-status-success font-bold ml-2">STABLE</span></p>
+                  </div>
+                  <div class="space-y-2">
+                      <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Uniformity Index</p>
+                      <p class="text-lg font-mono text-white">0.94 <span class="text-[10px] text-zinc-500 ml-2">LOW VARIANCE</span></p>
+                  </div>
+                  <div class="space-y-2 text-right">
+                      <button class="text-[10px] font-bold text-brand-primary uppercase tracking-widest hover:text-brand-accent transition-colors">Export Thermal Map →</button>
+                  </div>
+              </div>
+            </div>
+
+            <div class="industrial-card rounded-[2rem] p-10 h-[400px] flex flex-col bg-zinc-900/20 border-white/5 relative">
+              <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h3 class="font-header text-xl text-zinc-100 font-bold">Agent Policy Distribution</h3>
+                    <p class="text-xs text-zinc-500 mt-1">Real-time cooling vector allocation across nodes</p>
+                </div>
+                <div class="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-950/50 border border-white/5">
+                    <i data-lucide="cpu" class="w-4 h-4 text-status-success"></i>
+                    <span class="text-[10px] font-mono text-zinc-400">PPO_V2_LATEST</span>
+                </div>
+              </div>
+              <div class="flex-1 relative">
+                <canvas id="chart-policy"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Performance Stats -->
+          <div class="lg:col-span-4 space-y-8">
+            <div class="industrial-card rounded-[2.5rem] p-10 bg-zinc-900/40 border-white/5 relative overflow-hidden">
+              <div class="absolute -top-10 -right-10 w-40 h-40 bg-status-success/10 blur-[80px]"></div>
+              
+              <div class="flex items-center justify-between mb-10">
+                  <h3 class="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em]">Health Index</h3>
+                  <i data-lucide="shield" class="w-4 h-4 text-status-success"></i>
+              </div>
+
+              <div class="flex flex-col items-center">
+                <div class="relative w-56 h-56 flex items-center justify-center">
+                  <svg class="w-full h-full -rotate-90">
+                    <circle cx="112" cy="112" r="100" class="stroke-zinc-800/40" stroke-width="14" fill="transparent" />
+                    <circle id="perf-ring" cx="112" cy="112" r="100"
+                      class="stroke-brand-primary transition-all duration-1000" stroke-width="14" fill="transparent"
+                      stroke-dasharray="628" stroke-dashoffset="628" stroke-linecap="round" />
+                  </svg>
+                  <div class="absolute flex flex-col items-center">
+                    <span id="perf-val" class="text-6xl font-header font-bold text-white tracking-tighter">0%</span>
+                    <span class="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-widest">Operational</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-12 space-y-4">
+                  <div class="p-5 bg-zinc-950/50 rounded-2xl border border-white/5 flex justify-between items-center">
+                      <div class="flex flex-col">
+                          <span class="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Safety Score</span>
+                          <span class="text-lg font-header font-bold text-white">98.2</span>
+                      </div>
+                      <div class="w-12 h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                          <div class="w-[98%] h-full bg-status-success"></div>
+                      </div>
+                  </div>
+                  <div class="p-5 bg-zinc-950/50 rounded-2xl border border-white/5 flex justify-between items-center">
+                      <div class="flex flex-col">
+                          <span class="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Response Latency</span>
+                          <span class="text-lg font-header font-bold text-brand-primary">14ms</span>
+                      </div>
+                      <i data-lucide="timer" class="w-4 h-4 text-zinc-700"></i>
+                  </div>
+              </div>
+            </div>
+
+            <div class="industrial-card rounded-[2rem] p-8 h-[380px] flex flex-col bg-zinc-950/60 border-white/10 relative">
+               <div class="flex items-center justify-between mb-6">
+                   <h3 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reward Signal history</h3>
+                   <div class="flex gap-1">
+                       <span class="status-dot bg-status-ai"></span>
+                       <span class="status-dot bg-status-ai opacity-50"></span>
+                       <span class="status-dot bg-status-ai opacity-20"></span>
+                   </div>
+               </div>
+               <div class="flex-1 relative">
+                 <canvas id="chart-rewards"></canvas>
+               </div>
+            </div>
+
+            <div class="industrial-card rounded-2xl p-8 bg-zinc-900/20 border-white/5">
+                <h4 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-6">Thermal Event Log</h4>
+                <div class="space-y-4 font-mono text-[10px]">
+                    <div class="flex gap-3 text-zinc-500">
+                        <span class="text-status-success shrink-0">12:04:22</span>
+                        <p>> System stabilization complete. All zones nominal.</p>
+                    </div>
+                    <div class="flex gap-3 text-zinc-500">
+                        <span class="text-status-warning shrink-0">12:02:10</span>
+                        <p>> Minor hotspot detected in Zone 14. Adjusting...</p>
+                    </div>
+                    <div class="flex gap-3 text-zinc-400">
+                        <span class="text-zinc-600 shrink-0">12:00:00</span>
+                        <p>> Telemetry stream initialized.</p>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+    </div>
+    <!-- HPO Tuner Tab -->
+    <div id="tab-tuner" class="tab-pane hidden flex-1 overflow-y-auto p-6 space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Configuration Panel -->
+        <div class="lg:col-span-4 space-y-6">
+          <div class="industrial-card rounded-2xl p-6">
+            <h3 class="font-header text-lg text-white mb-6 flex items-center gap-2">
+              <i data-lucide="sliders" class="w-4 h-4 text-brand-primary"></i>
+              Hyperparameters
+            </h3>
+            <div class="space-y-6">
+              <div class="space-y-3">
+                <div class="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                  <span>Actor Learning Rate</span>
+                  <span id="val-actor-lr" class="text-brand-primary">0.0003</span>
+                </div>
+                <input type="range" id="input-actor-lr" min="0.00001" max="0.001" step="0.00001" value="0.0003" class="w-full h-1 bg-zinc-800 rounded appearance-none accent-brand-primary">
+              </div>
+              <div class="space-y-3">
+                <div class="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                  <span>Gamma (Discount)</span>
+                  <span id="val-gamma" class="text-brand-primary">0.99</span>
+                </div>
+                <input type="range" id="input-gamma" min="0.9" max="0.999" step="0.001" value="0.99" class="w-full h-1 bg-zinc-800 rounded appearance-none accent-brand-primary">
+              </div>
+              <div class="space-y-3">
+                <div class="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                  <span>Epochs per Update</span>
+                  <span id="val-epochs" class="text-brand-primary">10</span>
+                </div>
+                <input type="range" id="input-epochs" min="1" max="50" step="1" value="10" class="w-full h-1 bg-zinc-800 rounded appearance-none accent-brand-primary">
+              </div>
+              <button id="btn-start-train" class="w-full py-4 bg-brand-primary text-zinc-950 font-header font-bold rounded-xl shadow-[0_0_30px_rgba(14,165,233,0.2)] hover:bg-brand-accent transition-all flex items-center justify-center gap-2">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                Initiate Training
+              </button>
+              <button id="btn-stop-train" class="w-full py-4 bg-zinc-900 border border-zinc-700 text-zinc-400 font-header font-bold rounded-xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 hidden">
+                <i data-lucide="square" class="w-4 h-4"></i>
+                Terminate Process
+              </button>
+            </div>
+          </div>
+
+          <div class="industrial-card rounded-2xl p-6">
+            <h4 class="metric-label mb-4">Training Status</h4>
+            <div id="train-status-indicator" class="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-xl border border-white/5">
+              <span id="train-status-dot" class="w-3 h-3 rounded-full bg-zinc-700"></span>
+              <span id="train-status-text" class="text-xs font-mono text-zinc-400 uppercase tracking-widest">IDLE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Training Monitor -->
+        <div class="lg:col-span-8 space-y-6">
+          <div class="industrial-card rounded-2xl p-6 h-[350px] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="font-header text-lg text-white">Live Training Metrics</h3>
+              <div class="flex gap-4">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-brand-primary"></span>
+                  <span class="text-[10px] text-zinc-500">EPISODE REWARD</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex-1 relative">
+               <canvas id="chart-train-metrics"></canvas>
+            </div>
+          </div>
+
+          <div class="industrial-card rounded-2xl p-6 bg-zinc-950/50">
+             <div class="flex items-center justify-between mb-4">
+               <h4 class="metric-label">Kernel Training Stream</h4>
+               <span class="text-[9px] font-mono text-zinc-700 uppercase">Buffer: 100 lines</span>
+             </div>
+             <div id="train-terminal" class="h-64 overflow-y-auto font-mono text-[11px] space-y-1 custom-scrollbar">
+                <p class="text-zinc-600">> System ready for fine-tuning initialization.</p>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Asset Library Tab -->
+    <div id="tab-assets" class="tab-pane hidden flex-1 overflow-y-auto p-6 space-y-8">
+      <div class="flex items-end justify-between border-b border-white/5 pb-6">
+        <div>
+          <h2 class="font-header text-3xl text-white">Asset Repository</h2>
+          <p class="text-zinc-500 text-sm">Manage neural checkpoints, task definitions, and simulation datasets</p>
+        </div>
+        <div class="flex gap-3">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"></i>
+            <input type="text" placeholder="Filter assets..." class="bg-zinc-900 border border-white/5 rounded-xl py-2 pl-10 pr-4 text-xs text-white focus:outline-none focus:border-brand-primary/50 w-64">
+          </div>
+          <button class="btn-secondary py-2 px-4 flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Import Asset</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+        <!-- Scenario Library -->
+        <div class="xl:col-span-8 space-y-6">
+           <div class="flex items-center justify-between mb-2">
+              <h3 class="metric-label">Scenario Library</h3>
+              <span id="scenario-count" class="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-mono">03 SCENARIOS</span>
+           </div>
+           <div id="asset-scenarios-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <!-- Dynamically Populated -->
+           </div>
+
+           <div class="mt-12">
+              <h3 class="metric-label mb-4">Exported Datasets</h3>
+              <div class="industrial-card rounded-2xl overflow-hidden border-zinc-800/50">
+                 <table class="w-full text-left text-xs">
+                    <thead class="bg-zinc-950/50 text-zinc-500 border-b border-white/5 font-mono uppercase tracking-widest">
+                       <tr>
+                          <th class="px-6 py-4 font-bold">Filename</th>
+                          <th class="px-6 py-4 font-bold">Format</th>
+                          <th class="px-6 py-4 font-bold">Timestamp</th>
+                          <th class="px-6 py-4 text-right pr-8 font-bold">Action</th>
+                       </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                       <tr class="hover:bg-white/[0.02] transition-colors group">
+                          <td class="px-6 py-4 flex items-center gap-3">
+                             <div class="w-8 h-8 rounded bg-status-success/10 flex items-center justify-center">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-status-success"></i>
+                             </div>
+                             <div>
+                                <p class="text-white font-medium">rl_metrics.csv</p>
+                                <p class="text-[10px] text-zinc-600">Active session log</p>
+                             </div>
+                          </td>
+                          <td class="px-6 py-4 text-zinc-500 font-mono">CSV</td>
+                          <td class="px-6 py-4 text-zinc-500">2026-04-23 20:30</td>
+                          <td class="px-6 py-4 text-right pr-8">
+                             <button class="text-brand-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ml-auto">
+                                <i data-lucide="download" class="w-3 h-3"></i>
+                                <span>Export</span>
+                             </button>
+                          </td>
+                       </tr>
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+        </div>
+
+        <!-- Checkpoint History -->
+        <div class="xl:col-span-4 space-y-6">
+           <h3 class="metric-label">Neural Checkpoints</h3>
+           <div id="asset-checkpoints-list" class="space-y-4">
+              <!-- Dynamically Populated -->
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Environment Tab -->
+    <div id="tab-env" class="tab-pane hidden flex-1 overflow-y-auto p-6 space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Physics & Thermal -->
+        <div class="lg:col-span-8 space-y-6">
+          <div class="industrial-card rounded-2xl p-8">
+            <div class="flex items-center gap-4 mb-8">
+               <div class="w-12 h-12 rounded-2xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center">
+                 <i data-lucide="thermometer-snowflake" class="w-6 h-6 text-brand-primary"></i>
+               </div>
+               <div>
+                 <h3 class="font-header text-xl text-white">Thermal Physics Calibration</h3>
+                 <p class="text-xs text-zinc-500">Fine-tune simulation entropy and conductivity coefficients</p>
+               </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div class="space-y-6">
+                <div class="space-y-4">
+                  <div class="flex justify-between items-end">
+                    <label class="metric-label">Ambient Baseline (°C)</label>
+                    <span id="val-env-ambient" class="text-sm font-mono text-brand-primary">20.0</span>
+                  </div>
+                  <input type="range" id="input-env-ambient" min="10" max="45" step="0.5" value="20" class="w-full h-1.5 bg-zinc-800 rounded appearance-none accent-brand-primary">
+                  <p class="text-[10px] text-zinc-600">Standard intake temperature for node cooling units.</p>
+                </div>
+                <div class="space-y-4">
+                  <div class="flex justify-between items-end">
+                    <label class="metric-label">Heat Dissipation Rate</label>
+                    <span id="val-env-dissipation" class="text-sm font-mono text-brand-primary">0.12</span>
+                  </div>
+                  <input type="range" id="input-env-dissipation" min="0.01" max="0.5" step="0.01" value="0.12" class="w-full h-1.5 bg-zinc-800 rounded appearance-none accent-brand-primary">
+                  <p class="text-[10px] text-zinc-600">Coefficient for natural heat loss to the external environment.</p>
+                </div>
+              </div>
+
+              <div class="space-y-6">
+                <div class="space-y-4">
+                  <div class="flex justify-between items-end">
+                    <label class="metric-label">Zone Coupling Factor</label>
+                    <span id="val-env-coupling" class="text-sm font-mono text-brand-primary">0.05</span>
+                  </div>
+                  <input type="range" id="input-env-coupling" min="0" max="0.2" step="0.01" value="0.05" class="w-full h-1.5 bg-zinc-800 rounded appearance-none accent-brand-primary">
+                  <p class="text-[10px] text-zinc-600">Thermal leakage between adjacent physical zones.</p>
+                </div>
+                <div class="space-y-4">
+                   <div class="flex items-center justify-between mb-2">
+                     <label class="metric-label">Sensor Noise Level</label>
+                     <span id="val-env-noise" class="text-sm font-mono text-status-warning">Low</span>
+                   </div>
+                   <div class="flex gap-2">
+                     <button class="flex-1 py-2 bg-zinc-900 border border-zinc-700 rounded text-[10px] font-bold uppercase hover:bg-zinc-800">None</button>
+                     <button class="flex-1 py-2 bg-brand-primary/20 border border-brand-primary/40 rounded text-[10px] font-bold uppercase text-brand-primary">Low</button>
+                     <button class="flex-1 py-2 bg-zinc-900 border border-zinc-700 rounded text-[10px] font-bold uppercase hover:bg-zinc-800">High</button>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-12 pt-8 border-t border-white/5 flex justify-end gap-4">
+               <button id="btn-reset-env" class="btn-secondary px-8">Reset Defaults</button>
+               <button id="btn-save-env" class="btn-primary px-10">Deploy Configuration</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topology & Limits -->
+        <div class="lg:col-span-4 space-y-6">
+          <div class="industrial-card rounded-2xl p-6">
+            <h4 class="metric-label mb-6">Cluster Topology</h4>
+            <div class="space-y-4">
+              <div class="p-4 bg-zinc-950/50 rounded-xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <p class="text-[10px] text-zinc-500 font-bold uppercase">Active Zones</p>
+                  <p class="text-xl font-header text-white">10 Nodes</p>
+                </div>
+                <i data-lucide="network" class="w-5 h-5 text-zinc-700"></i>
+              </div>
+              <div class="p-4 bg-zinc-950/50 rounded-xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <p class="text-[10px] text-zinc-500 font-bold uppercase">Update Rate</p>
+                  <p class="text-xl font-header text-white">1.0 Hz</p>
+                </div>
+                <i data-lucide="timer" class="w-5 h-5 text-zinc-700"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="industrial-card rounded-2xl p-6 border-status-error/20">
+            <h4 class="metric-label mb-6 text-status-error">Safety Guardrails</h4>
+            <div class="space-y-6">
+               <div class="space-y-2">
+                 <div class="flex justify-between text-[10px] font-mono text-zinc-500">
+                   <span>Critical Threshold</span>
+                   <span class="text-status-error">38.0°C</span>
+                 </div>
+                 <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+                   <div class="bg-status-error w-[80%] h-full"></div>
+                 </div>
+               </div>
+               <div class="space-y-2">
+                 <div class="flex justify-between text-[10px] font-mono text-zinc-500">
+                   <span>Hard Shutdown</span>
+                   <span class="text-status-error">45.0°C</span>
+                 </div>
+                 <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+                   <div class="bg-status-error w-full h-full opacity-30"></div>
+                 </div>
+               </div>
+               <div class="pt-4">
+                 <button class="w-full py-3 bg-status-error/10 border border-status-error/30 text-status-error text-[10px] font-bold uppercase rounded-lg hover:bg-status-error/20 transition-all">Emergency Halt Protocol</button>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ================= TOAST ================= -->
+<div id="toast" class="fixed bottom-6 right-6 hidden bg-status-error text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium border border-white/20 backdrop-blur-xl animate-in slide-in-from-bottom-5">
+  <div class="flex items-center gap-3">
+    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+    <span id="toast-message">Message here</span>
+  </div>
+</div>
+
+<!-- ================= SCRIPT ================= --><script type="module">
+  import { apiCall, updateDashboardState, showToast, createZoneCard, updateMetrics, createDashboardCard } from './ui/ui.js';
+  import { createAnalyticsChart, updateChartData } from './ui/charts.js';
+
+  let simulationInterval = null;
+  let currentObservation = null;
+  let isAiPilot = false;
+  let activeTab = 'dashboard';
+  
+  // Analytics Charts
+  let chartRewards = null;
+  let chartPolicy = null;
+  let rewardHistory = [];
+
+  // Tuner Variables
+  let chartTrain = null;
+  let trainInterval = null;
+
+  async function handleReset() {
+    const selector = document.getElementById('task-selector');
+    const task = selector ? selector.value : 'easy';
+    logTerminal(`Initiating reset for task: ${task}...`, 'brand-primary');
+    try {
+      const data = await apiCall(`/reset?task_name=${task}`, 'POST');
+      currentObservation = data.observation;
+      rewardHistory = [];
+      
+      await initZones();
+      initAnalyticsUI();
+      initTunerUI();
+      initEnvUI();
+      
+      syncAllViews(data);
+      showToast(`Environment reset: ${task}`, false);
+      logTerminal(`Scenario [${task}] initialized. System Ready.`, 'status-success');
+    } catch (e) {
+      logTerminal(`Reset failed: ${e.message}`, 'status-error');
+    }
+  }
+
+  async function handleStep() {
+    if (!currentObservation) return;
+    const slider = document.getElementById('cooling-slider') || document.getElementById('slider-cooling-cmd');
+    const cooling = parseFloat(slider?.value || 0.4);
+    const numZones = currentObservation.temperatures.length;
+    const action = { cooling: Array(numZones).fill(cooling) };
+    
+    try {
+      const data = await apiCall('/step', 'POST', action);
+      currentObservation = data.observation;
+      if (data.reward !== undefined) rewardHistory.push(data.reward);
+      syncAllViews(data);
+      
+      if (data.done) {
+        stopSimulation();
+        showToast('Sequence complete', false);
+        logTerminal('Sequence terminated: Boundary reached.', 'status-warning');
+      }
+    } catch (e) {
+      stopSimulation();
+    }
+  }
+
+  async function syncAllViews(data) {
+    if (!data) return;
+    updateDashboardState(data, 'dashboard-zones-grid');
+    updateDashboardState(data, 'zones-grid');
+    
+    const metrics = await apiCall('/metrics');
+    updateMetrics({
+      safety_score: metrics.safety_score,
+      efficiency: metrics.efficiency
+    });
+    
+    // Update Tab-Specific Summary Cards
+    const safetyEl = document.getElementById('metric-safety-cmd');
+    const effEl = document.getElementById('metric-efficiency-cmd');
+    if (safetyEl) safetyEl.textContent = metrics.safety_score;
+    if (effEl) effEl.textContent = `${metrics.efficiency}%`;
+
+    // Analytics Updates
+    updateHeatmap(data.observation.temperatures);
+    updatePerformanceStats(data, metrics);
+    updateChartData(data.observation);
+    updateAnalyticsCharts(data);
+  }
+
+  function updateHeatmap(temps) {
+    const container = document.getElementById('thermal-heatmap');
+    if (!container) return;
+    const cells = container.querySelectorAll('.heatmap-cell');
+    temps.forEach((t, i) => {
+      if (cells[i]) {
+        const hue = Math.max(0, 240 - (t - 20) * 15); // 240 (blue) to 0 (red)
+        cells[i].style.backgroundColor = `hsl(${hue}, 70%, 50%)`;
+        cells[i].title = `Zone ${i+1}: ${t.toFixed(1)}°C`;
+        cells[i].classList.toggle('animate-pulse', t > 35);
+      }
+    });
+  }
+
+  function updatePerformanceStats(data, metrics) {
+    const perfRing = document.getElementById('perf-ring');
+    const perfVal = document.getElementById('perf-val');
+    if (perfRing && perfVal) {
+      // New circumference for r=100 is ~628
+      const offset = 628 - (628 * metrics.efficiency / 100);
+      perfRing.style.strokeDashoffset = offset;
+      perfVal.textContent = `${metrics.efficiency}%`;
+    }
+    
+    const temps = data.observation.temperatures;
+    const mean = temps.reduce((a, b) => a + b, 0) / temps.length;
+    const peak = Math.max(...temps);
+    
+    // Selectors for new larger stats
+    const meanLarge = document.getElementById('stat-mean-temp-large');
+    const peakLarge = document.getElementById('stat-peak-temp-large');
+    const effLarge = document.getElementById('stat-efficiency-large');
+
+    if (meanLarge) meanLarge.textContent = `${mean.toFixed(1)}°C`;
+    if (peakLarge) peakLarge.textContent = `${peak.toFixed(1)}°C`;
+    if (effLarge) effLarge.textContent = `${metrics.efficiency}%`;
+
+    // Legacy selectors (if any still exist)
+    const meanEl = document.getElementById('stat-mean-temp');
+    const peakEl = document.getElementById('stat-peak-temp');
+    if (meanEl) meanEl.textContent = `${mean.toFixed(1)}°`;
+    if (peakEl) peakEl.textContent = `${peak.toFixed(1)}°`;
+  }
+
+  function updateAnalyticsCharts(data) {
+    if (chartRewards && rewardHistory.length > 0) {
+      chartRewards.data.labels = rewardHistory.map((_, i) => i);
+      chartRewards.data.datasets[0].data = rewardHistory;
+      chartRewards.update();
+    }
+    
+    if (chartPolicy && data.observation) {
+      chartPolicy.data.datasets[0].data = data.observation.temperatures;
+      chartPolicy.update('none');
+    }
+  }
+
+  function initTunerUI() {
+    if (chartTrain) chartTrain.destroy();
+    const ctx = document.getElementById('chart-train-metrics')?.getContext('2d');
+    if (ctx) {
+      chartTrain = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Episode Reward', data: [], borderColor: '#0ea5e9', borderWidth: 2, tension: 0.3, pointRadius: 0, fill: true, backgroundColor: 'rgba(14, 165, 233, 0.05)' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }, plugins: { legend: { display: false } } }
+      });
+    }
+  }
+
+  async function startTraining() {
+    const params = {
+      actor_lr: parseFloat(document.getElementById('input-actor-lr').value),
+      gamma: parseFloat(document.getElementById('input-gamma').value),
+      epochs: parseInt(document.getElementById('input-epochs').value),
+      max_episodes: 500
+    };
+    
+    try {
+      const res = await apiCall('/train/start', 'POST', params);
+      if (res.status === 'started' || res.status === 'already_running') {
+        document.getElementById('btn-start-train').classList.add('hidden');
+        document.getElementById('btn-stop-train').classList.remove('hidden');
+        showToast('Training session initiated', false);
+        pollTrainStatus();
+      }
+    } catch (e) { showToast('Training launch failed', true); }
+  }
+
+  async function stopTraining() {
+    try {
+      await apiCall('/train/stop', 'POST');
+      document.getElementById('btn-start-train').classList.remove('hidden');
+      document.getElementById('btn-stop-train').classList.add('hidden');
+    } catch (e) {}
+  }
+
+  async function pollTrainStatus() {
+    if (trainInterval) clearInterval(trainInterval);
+    trainInterval = setInterval(async () => {
+      try {
+        const status = await apiCall('/train/status');
+        const metrics = await apiCall('/train/metrics');
+        
+        const dot = document.getElementById('train-status-dot');
+        const text = document.getElementById('train-status-text');
+        if (status.is_running) {
+          dot.className = 'w-3 h-3 rounded-full bg-status-success animate-pulse';
+          text.textContent = 'LEARNING';
+          text.className = 'text-xs font-mono text-status-success uppercase tracking-widest';
+        } else {
+          dot.className = 'w-3 h-3 rounded-full bg-zinc-700';
+          text.textContent = 'IDLE';
+          text.className = 'text-xs font-mono text-zinc-400 uppercase tracking-widest';
+          document.getElementById('btn-start-train').classList.remove('hidden');
+          document.getElementById('btn-stop-train').classList.add('hidden');
+          clearInterval(trainInterval);
+        }
+
+        const term = document.getElementById('train-terminal');
+        if (term && status.logs) {
+          term.innerHTML = status.logs.map(l => `<p class="text-zinc-400">> ${l}</p>`).join('');
+          term.scrollTop = term.scrollHeight;
+        }
+
+        if (chartTrain && metrics.episodes.length > 0) {
+          chartTrain.data.labels = metrics.episodes;
+          chartTrain.data.datasets[0].data = metrics.rewards;
+          chartTrain.update('none');
+        }
+      } catch (e) { clearInterval(trainInterval); }
+    }, 2000);
+  }
+
+  async function initEnvUI() {
+    try {
+      const config = await apiCall('/env/config');
+      if (config.ambient_temperature !== undefined) {
+        document.getElementById('input-env-ambient').value = config.ambient_temperature;
+        document.getElementById('val-env-ambient').textContent = config.ambient_temperature.toFixed(1);
+      }
+      if (config.gamma !== undefined) {
+        document.getElementById('input-env-dissipation').value = config.gamma;
+        document.getElementById('val-env-dissipation').textContent = config.gamma.toFixed(2);
+      }
+      if (config.coupling !== undefined) {
+        document.getElementById('input-env-coupling').value = config.coupling;
+        document.getElementById('val-env-coupling').textContent = config.coupling.toFixed(2);
+      }
+    } catch (e) {}
+  }
+
+  async function saveEnvConfig() {
+    const config = {
+      ambient_temperature: parseFloat(document.getElementById('input-env-ambient').value),
+      gamma: parseFloat(document.getElementById('input-env-dissipation').value),
+      coupling: parseFloat(document.getElementById('input-env-coupling').value)
+    };
+    try {
+      await apiCall('/env/config', 'POST', config);
+      showToast('Environment recalibrated', false);
+      logTerminal('Physics parameters deployed: Ambient=' + config.ambient_temperature + ', Gamma=' + config.gamma, 'status-success');
+    } catch (e) { showToast('Deployment failed', true); }
+  }
+
+  async function handleAiAction() {
+    if (!currentObservation) return;
+    const aiStatus = document.getElementById('ai-status') || document.getElementById('ai-status-cmd');
+    const aiSugg = document.getElementById('ai-suggestion') || document.getElementById('ai-suggestion-cmd');
+    
+    if (aiStatus) aiStatus.textContent = 'Thinking...';
+    try {
+      const agentData = await apiCall('/agent', 'POST', currentObservation);
+      const action = { cooling: agentData.action };
+      const vectorStr = `[${agentData.action.slice(0,3).map(v => v.toFixed(2)).join(', ')}...]`;
+      
+      if (aiSugg) aiSugg.textContent = `Applied Vector: ${vectorStr}`;
+      
+      const data = await apiCall('/step', 'POST', action);
+      currentObservation = data.observation;
+      if (data.reward !== undefined) rewardHistory.push(data.reward);
+      syncAllViews(data);
+
+      if (aiStatus) aiStatus.textContent = isAiPilot ? 'Pilot Engaged' : 'Vector Applied';
+      logTerminal(`AI applied cooling vector. Score: ${currentObservation.rewards?.toFixed(2) || 'N/A'}`, 'status-ai');
+
+      if (isAiPilot && !data.done) {
+         setTimeout(handleAiAction, 1000);
+      }
+    } catch (e) {
+      if (aiStatus) aiStatus.textContent = 'Error';
+    }
+  }
+
+  function logTerminal(msg, colorClass = 'zinc-500') {
+    const term = document.getElementById('terminal-output');
+    if (!term) return;
+    const p = document.createElement('p');
+    const time = new Date().toLocaleTimeString();
+    p.innerHTML = `<span class="text-zinc-600 mr-2">[${time}]</span> <span class="text-${colorClass}">${msg}</span>`;
+    term.appendChild(p);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function startSimulation() {
+    if (simulationInterval) return;
+    simulationInterval = setInterval(handleStep, 1000);
+    const btn = document.getElementById('btn-execute');
+    if (btn) {
+      btn.classList.add('animate-pulse');
+      btn.innerHTML = '<i data-lucide="square" class="w-3.5 h-3.5"></i><span>Stop</span>';
+      lucide.createIcons();
+    }
+    logTerminal('Automatic sequence initiated.', 'brand-primary');
+  }
+
+  function stopSimulation() {
+    if (simulationInterval) {
+      clearInterval(simulationInterval);
+      simulationInterval = null;
+    }
+    const btn = document.getElementById('btn-execute');
+    if (btn) {
+      btn.classList.remove('animate-pulse');
+      btn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5"></i><span>Execute</span>';
+      lucide.createIcons();
+    }
+    logTerminal('Sequence halted.', 'status-warning');
+  }
+
+  async function initZones() {
+    const dashboardGrid = document.getElementById('dashboard-zones-grid');
+    const commandGrid = document.getElementById('zones-grid');
+    const heatmap = document.getElementById('thermal-heatmap');
+    
+    if (dashboardGrid) dashboardGrid.innerHTML = '';
+    if (commandGrid) commandGrid.innerHTML = '';
+    if (heatmap) heatmap.innerHTML = '';
+    
+    const zonesData = await apiCall('/zones');
+    for (let i = 0; i < zonesData.num_zones; i++) {
+      const nodeName = `NODE_0x${(i*16).toString(16).toUpperCase()}`;
+      if (dashboardGrid) dashboardGrid.appendChild(createDashboardCard(i + 1, nodeName));
+      if (commandGrid) commandGrid.appendChild(createZoneCard(i + 1, nodeName));
+      
+      const cell = document.createElement('div');
+      cell.className = 'heatmap-cell rounded-sm bg-zinc-900 border border-white/5 transition-colors duration-500';
+      if (heatmap) heatmap.appendChild(cell);
+    }
+    lucide.createIcons();
+  }
+
+  function initAnalyticsUI() {
+    if (chartRewards) chartRewards.destroy();
+    if (chartPolicy) chartPolicy.destroy();
+
+    const shadowPlugin = {
+        id: 'shadowPlugin',
+        beforeDraw: (chart) => {
+            const { ctx } = chart;
+            ctx.save();
+            ctx.shadowColor = 'rgba(14, 165, 233, 0.4)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 4;
+        },
+        afterDraw: (chart) => {
+            chart.ctx.restore();
+        }
+    };
+
+    const ctxRewards = document.getElementById('chart-rewards')?.getContext('2d');
+    if (ctxRewards) {
+      chartRewards = new Chart(ctxRewards, {
+        plugins: [shadowPlugin],
+        type: 'line',
+        data: { 
+            labels: Array.from({length: 40}, (_, i) => i), 
+            datasets: [{ 
+                label: 'Reward', 
+                data: Array(40).fill(0), 
+                borderColor: '#0ea5e9', 
+                borderWidth: 3, 
+                tension: 0.5, 
+                fill: true, 
+                backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                pointRadius: 0
+            }] 
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            animations: {
+                y: { duration: 800, easing: 'easeInOutQuart' }
+            },
+            scales: { 
+                x: { display: false }, 
+                y: { 
+                    min: 0,
+                    max: 100,
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#52525b', font: { family: 'JetBrains Mono', size: 9 } }
+                } 
+            }, 
+            plugins: { legend: { display: false } } 
+        }
+      });
+    }
+
+    const ctxPolicy = document.getElementById('chart-policy')?.getContext('2d');
+    if (ctxPolicy) {
+      chartPolicy = new Chart(ctxPolicy, {
+        type: 'bar',
+        data: { labels: Array.from({length: 10}, (_, i) => `Z${i+1}`), datasets: [{ label: 'Temp', data: [], backgroundColor: '#8b5cf6' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, grid: { color: 'rgba(255,255,255,0.05)' } } }, plugins: { legend: { display: false } } }
+      });
+    }
+  }
+
+  async function loadTasks() {
+    try {
+      const data = await apiCall('/tasks');
+      const selector = document.getElementById('task-selector');
+      if (!selector || !data.tasks) return;
+      selector.innerHTML = '';
+      data.tasks.forEach(task => {
+        const opt = document.createElement('option');
+        opt.value = task;
+        opt.textContent = `SCENARIO: ${task.toUpperCase()}`;
+        selector.appendChild(opt);
+      });
+    } catch (e) { console.error('Task load error:', e); }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    lucide.createIcons();
+    
+    try {
+      createAnalyticsChart();
+    } catch (e) { console.error('Chart init error:', e); }
+    
+    // Attach listeners immediately before any async await
+    document.getElementById('btn-recalibrate')?.addEventListener('click', handleReset);
+    document.getElementById('btn-execute')?.addEventListener('click', () => {
+      if (simulationInterval) stopSimulation();
+      else startSimulation();
+    });
+    document.getElementById('btn-ai-action')?.addEventListener('click', handleAiAction);
+    document.getElementById('btn-manual-ai-cmd')?.addEventListener('click', handleAiAction);
+
+    document.getElementById('btn-start-train')?.addEventListener('click', startTraining);
+    document.getElementById('btn-stop-train')?.addEventListener('click', stopTraining);
+    document.getElementById('btn-save-env')?.addEventListener('click', saveEnvConfig);
+    document.getElementById('btn-reset-env')?.addEventListener('click', async () => {
+      // Re-initialize with original defaults from active task if needed, 
+      // but for now just refresh from current config (reset local changes)
+      await initEnvUI();
+      showToast('Local changes discarded', false);
+    });
+
+    ['actor-lr', 'gamma', 'epochs'].forEach(id => {
+      const input = document.getElementById(`input-${id}`);
+      const val = document.getElementById(`val-${id}`);
+      input?.addEventListener('input', (e) => { val.textContent = e.target.value; });
+    });
+
+    ['ambient', 'dissipation', 'coupling'].forEach(id => {
+      const input = document.getElementById(`input-env-${id}`);
+      const val = document.getElementById(`val-env-${id}`);
+      input?.addEventListener('input', (e) => { 
+        val.textContent = parseFloat(e.target.value).toFixed(id === 'ambient' ? 1 : 2); 
+      });
+    });
+
+    const navItems = { 
+      'nav-dashboard': 'tab-dashboard', 
+      'nav-command': 'tab-command', 
+      'nav-analytics': 'tab-analytics',
+      'nav-tuner': 'tab-tuner',
+      'nav-env': 'tab-env',
+      'nav-assets': 'tab-assets'
+    };
+    Object.entries(navItems).forEach(([navId, tabId]) => {
+      document.getElementById(navId)?.addEventListener('click', (e) => {
+        e.preventDefault();
+        Object.keys(navItems).forEach(id => {
+          document.getElementById(id)?.classList.remove('active', 'bg-brand-primary/10', 'text-brand-primary', 'border-brand-primary/20');
+          document.getElementById(id)?.classList.add('text-zinc-400');
+        });
+        document.getElementById(navId)?.classList.add('active', 'bg-brand-primary/10', 'text-brand-primary', 'border-brand-primary/20');
+        document.getElementById(navId)?.classList.remove('text-zinc-400');
+        Object.values(navItems).forEach(id => document.getElementById(id).classList.add('hidden'));
+        document.getElementById(tabId).classList.remove('hidden');
+        activeTab = tabId.replace('tab-', '');
+        
+        if (activeTab === 'assets') initAssetsUI();
+      });
+    });
+
+    async function initAssetsUI() {
+      const scenarioGrid = document.getElementById('asset-scenarios-grid');
+      const checkpointList = document.getElementById('asset-checkpoints-list');
+      if (!scenarioGrid || !checkpointList) return;
+
+      try {
+        const scenarios = await apiCall('/assets/scenarios');
+        scenarioGrid.innerHTML = scenarios.scenarios.map(s => `
+          <div class="industrial-card rounded-2xl p-6 group hover:border-brand-primary/30 transition-all cursor-pointer" onclick="document.getElementById('task-selector').value='${s.name}'; window.dispatchEvent(new Event('load-task'));">
+            <div class="flex justify-between items-start mb-6">
+              <div class="w-10 h-10 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-center group-hover:bg-brand-primary/10 group-hover:border-brand-primary/20 transition-colors">
+                <i data-lucide="map" class="w-5 h-5 text-zinc-500 group-hover:text-brand-primary"></i>
+              </div>
+              <span class="text-[9px] px-2 py-1 rounded bg-zinc-900 text-zinc-400 font-bold uppercase tracking-wider">${s.difficulty}</span>
+            </div>
+            <h4 class="text-white font-header text-lg mb-1">${s.name.toUpperCase()}</h4>
+            <div class="space-y-2">
+              <div class="flex justify-between text-[10px] font-mono text-zinc-600">
+                <span>Zones</span>
+                <span class="text-zinc-400">${s.num_zones} Nodes</span>
+              </div>
+              <div class="flex justify-between text-[10px] font-mono text-zinc-600">
+                <span>Ambient</span>
+                <span class="text-zinc-400">${s.ambient}°C</span>
+              </div>
+            </div>
+          </div>
+        `).join('');
+        document.getElementById('scenario-count').textContent = `${scenarios.scenarios.length.toString().padStart(2, '0')} SCENARIOS`;
+
+        const checkpoints = await apiCall('/assets/checkpoints');
+        checkpointList.innerHTML = checkpoints.checkpoints.map(c => `
+          <div class="industrial-card rounded-xl p-4 flex items-center justify-between group hover:bg-white/[0.02] transition-all">
+            <div class="flex items-center gap-4">
+              <div class="w-2 h-2 rounded-full bg-status-success"></div>
+              <div>
+                <p class="text-xs text-white font-medium">${c.name}</p>
+                <p class="text-[9px] text-zinc-600 font-mono">${c.size} • ${new Date(c.modified * 1000).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <button class="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-brand-primary/20 hover:border-brand-primary/40">
+              <i data-lucide="play" class="w-3 h-3 text-brand-primary"></i>
+            </button>
+          </div>
+        `).join('');
+        lucide.createIcons();
+      } catch (e) { console.error('Asset load error:', e); }
+    }
+
+    window.addEventListener('load-task', handleReset);
+
+    document.getElementById('btn-toggle-ai-cmd')?.addEventListener('click', function() {
+      isAiPilot = !isAiPilot;
+      this.classList.toggle('bg-status-ai', isAiPilot);
+      this.querySelector('div').classList.toggle('translate-x-5', isAiPilot);
+      document.getElementById('ai-active-dot-cmd')?.classList.toggle('bg-status-ai', isAiPilot);
+      document.getElementById('ai-active-dot-cmd')?.classList.toggle('animate-pulse', isAiPilot);
+      document.getElementById('ai-status-cmd').textContent = isAiPilot ? 'Pilot Engaged' : 'Idle';
+      document.getElementById('ai-status-cmd').classList.toggle('text-status-ai', isAiPilot);
+      if (isAiPilot) handleAiAction();
+    });
+
+    document.getElementById('slider-cooling-cmd')?.addEventListener('input', (e) => {
+      const val = Math.round(e.target.value * 100);
+      document.getElementById('val-cooling-cmd').textContent = `${val}%`;
+    });
+
+    // Terminal ID setup
+    const terminal = document.getElementById('kernel-log');
+    if (terminal) terminal.id = 'terminal-output';
+
+    // Async initialization after listeners are bound
+    try {
+      await loadTasks();
+      await handleReset();
+    } catch (e) {
+      console.error('Initialization error:', e);
+      logTerminal('System initialization partial failure. Check logs.', 'status-error');
+    }
+  });
+</script>
+</body>
+</html>
+
