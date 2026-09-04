@@ -9,7 +9,7 @@ This document tracks the detailed engineering implementation plans for addressin
 | Problem ID | Problem Description | Plan Status |
 |---|---|---|
 | **C1** | Phantom Baselines Claimed in README | ✅ **Completed & Verified** |
-| **C2** | Active HuggingFace API Secret Committed to Git | ⏳ Pending |
+| **C2** | Active HuggingFace API Secret Committed to Git | ✅ **Completed & Verified** |
 | **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ⏳ Pending |
 | **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ⏳ Pending |
 | **H1** | Global Jitter Penalty Bypass Exploit | ⏳ Pending |
@@ -108,3 +108,87 @@ README lines 277–294 currently claim performance scores for Rule-Based (0.45),
 1. `pytest tests/test_gym_env.py`: Test Gymnasium environment conformance using `gymnasium.utils.env_checker.check_env`.
 2. `pytest tests/test_baselines.py`: Validate action shapes, ranges `[0.0, 1.0]`, and state stability for Rule-Based, PID, and PPO.
 3. Run `python run_benchmark.py`: Confirm reproducible output table without exceptions.
+
+---
+
+### 2. Fix Plan for C2: Active API Token Committed to Git
+
+#### Overview
+Line 3 of `.env` contains an active personal access token: `HF_TOKEN=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`. Furthermore, `.env` is actively tracked in git index (`git ls-files .env` shows `.env`), and `.gitignore` contains unresolved git merge conflict markers (`<<<<<<< HEAD`, `=======`, `>>>>>>>`). Additionally, the absence of `.dockerignore` causes `.env` and sensitive files to be copied into production Docker images via `COPY . .`.
+
+#### Architecture of Solution
+```
+        [Unsafe: Tracked Secret in Git & Image]
+           .env (with live HF_TOKEN) 
+               ├──> Tracked in Git
+               └──> Baked into Docker Image via "COPY . ."
+
+                         │
+                         ▼  REMEDIATION
+        [Safe: Zero Secrets in Tree, Template Config]
+           1. Remove .env from git tracking (git rm --cached .env)
+           2. Create .env.example with dummy placeholders
+           3. Sanitize local .env (strip token to template/environment variable)
+           4. Fix merge conflicts in .gitignore ensuring .env is ignored
+           5. Create .dockerignore excluding .env, .git, models, and caches
+           6. User action: Revoke/regenerate the exposed token on HuggingFace
+```
+
+#### Detailed File Changes
+
+##### 1. `.env.example` (NEW)
+Create a safe template showing required environment variables:
+```dotenv
+# API Configuration for LLM Inference
+API_BASE_URL=https://router.huggingface.co/v1
+MODEL_NAME=google/gemma-4-31B-it
+HF_TOKEN=your_huggingface_token_here
+IMAGE_NAME=""
+```
+
+##### 2. `.env` (SANITIZE)
+Replace the active token in `.env` with a placeholder:
+```dotenv
+API_BASE_URL=https://router.huggingface.co/v1
+MODEL_NAME=google/gemma-4-31B-it
+HF_TOKEN=your_huggingface_token_here
+IMAGE_NAME=""
+```
+
+##### 3. Git Index Untracking
+Execute:
+```bash
+git rm --cached .env
+```
+This leaves the file on disk locally for development, but removes it from the git tracking index.
+
+##### 4. `.gitignore` (CLEAN & FIX)
+- Remove the unresolved merge conflict markers at lines 1–7 and lines 215–216.
+- Ensure `.env`, `.env.*`, and sensitive keys are explicitly listed.
+- Also ignore `models/*.zip` (large model binaries) and `.pytest_cache/`.
+
+##### 5. `.dockerignore` (NEW)
+Create a `.dockerignore` file to ensure secrets, git history, and bloated caches are never packaged into container images:
+```dockerignore
+.git
+.gitignore
+.env
+.env.*
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+models/*.zip
+*.log
+```
+
+##### 6. User Security Action (CRITICAL)
+- The token `hf_VFyWpnqu...` has already been exposed to the git commit history. The user must immediately navigate to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) and **delete / revoke** this token.
+- Guidance will be provided for optional history rewriting (`git filter-repo` or BFG) if preparing the repo for public presentation.
+
+#### Verification & Testing
+1. `git ls-files .env`: Must return empty (not tracked).
+2. `git status`: Confirm `.env` is untracked and ignored by `.gitignore`.
+3. `grep -rn "hf_VFy" .`: Confirm no file in working tree contains the exposed secret.
+4. `test_submission_readiness.py`: Ensure test suite still imports environment cleanly using fallback tokens.

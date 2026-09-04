@@ -9,7 +9,7 @@ This document serves as the master register of all material engineering, ML/RL, 
 | ID | Severity | Category | Subsystem | Brief Summary |
 |---|---|---|---|---|
 | **C1** | ✅ RESOLVED | ML / Claims | `README.md`, `baselines/` | Real empirical baselines trained and verified (PPO, PID, Rule-Based, LLM, Zero) |
-| **C2** | 🔴 CRITICAL | Security | `.env` | Live HuggingFace API token committed to git |
+| **C2** | ✅ RESOLVED | Security | `.env`, `.gitignore` | Token untracked from git, sanitized with template, .gitignore & .dockerignore configured |
 | **C3** | 🔴 CRITICAL | Evaluation / API | `core/env.py`, `core/simulator.py` | `/reset` accepts arbitrary `TaskConfig` payloads allowing evaluation gaming |
 | **C4** | 🔴 CRITICAL | Evaluation | `core/simulator.py` | `get_score()` returns perfect score (1.0) with zero actions taken |
 | **H1** | 🟠 HIGH | RL / Reward | `reward/reward_fn.py` | Jitter penalty bypassed globally if any single zone is near safety threshold |
