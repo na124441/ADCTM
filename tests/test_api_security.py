@@ -84,3 +84,37 @@ def test_simulate_endpoint_executes_successfully(client):
     assert "score" in data
     assert 0.0 <= data["score"] <= 1.0
 
+
+def test_multi_tenant_session_isolation(client):
+    # Verify that two concurrent clients with separate session_ids do not overwrite each other
+    res1 = client.post("/reset", params={"task_name": "easy", "session_id": "client-A"})
+    assert res1.status_code == 200
+    obs1 = res1.json()
+    assert len(obs1["temperatures"]) == 3
+
+    res2 = client.post("/reset", params={"task_name": "hard", "session_id": "client-B"})
+    assert res2.status_code == 200
+    obs2 = res2.json()
+    assert len(obs2["temperatures"]) == 8
+
+    # Step client A with 3 zones
+    step_res1 = client.post("/step", json={"cooling": [0.3, 0.3, 0.3]}, params={"session_id": "client-A"})
+    assert step_res1.status_code == 200
+    assert step_res1.json()["observation"]["time_step"] == 1
+
+    # Step client B with 8 zones
+    step_res2 = client.post("/step", json={"cooling": [0.8] * 8}, params={"session_id": "client-B"})
+    assert step_res2.status_code == 200
+    assert step_res2.json()["observation"]["time_step"] == 1
+
+    # Check state isolation
+    state1 = client.get("/state", params={"session_id": "client-A"}).json()
+    state2 = client.get("/state", params={"session_id": "client-B"}).json()
+    assert state1["config"]["num_zones"] == 3
+    assert state2["config"]["num_zones"] == 8
+
+    # Check uninitialized session returns 400
+    uninit_res = client.get("/state", params={"session_id": "non-existent-client"})
+    assert uninit_res.status_code == 400
+
+

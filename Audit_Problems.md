@@ -166,12 +166,15 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ### 🟡 MEDIUM SEVERITY FINDINGS
 
-#### Problem ID: M1 — Global `CURRENT_SESSION` Without Multi-Tenant State Isolation
+#### Problem ID: M1 — Global `CURRENT_SESSION` Without Multi-Tenant State Isolation ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
 - **Subsystem**: `core/env.py` (Line 46)
+- **Status**: ✅ RESOLVED — Implemented `ACTIVE_SESSIONS: Dict[str, SimulationSession]` registry with per-session fine-grained locks and global registry lock. Maintained `DEFAULT_SESSION_ID = "default"` for backward compatibility. Added session resolution via query parameters and headers across all endpoints. Verified via concurrency and isolation test `test_multi_tenant_session_isolation` in `tests/test_api_security.py`.
 - **Problem**: A single global variable `CURRENT_SESSION` holds the environment instance. While `threading.Lock` serializes steps, two simultaneous client sessions will overwrite each other's state and interfere with ongoing rollouts.
+- **Why it matters**: Multiple clients or parallel benchmark evaluation threads would corrupt each other's rollout trajectories.
 
 ---
+
 
 #### Problem ID: M2 — Observation Space Lacks Goal Parameters (Non-Markovian from Observation Alone)
 - **Severity**: 🟡 MEDIUM

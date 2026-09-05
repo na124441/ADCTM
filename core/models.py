@@ -71,6 +71,7 @@ class ResetPayload(BaseModel):
     """
     task_name: str = Field("easy", description="Benchmark tier: easy, medium, or hard")
     seed: Optional[int] = Field(None, description="Optional episode RNG seed")
+    session_id: Optional[str] = Field(None, description="Optional session identifier for multi-tenant isolation")
 
     model_config = ConfigDict(extra="forbid")
 

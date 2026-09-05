@@ -42,11 +42,59 @@ app = FastAPI(
     default_response_class=PrettyJSONResponse
 )
 
-# Global variables to retain the active simulation session state across HTTP calls
+# Global session registry to retain active simulation sessions across HTTP calls with multi-tenant isolation
+ACTIVE_SESSIONS: Dict[str, SimulationSession] = {}
+SESSION_LOCKS: Dict[str, threading.Lock] = {}
+REGISTRY_LOCK = threading.Lock()
+DEFAULT_SESSION_ID = "default"
+
+# Backward compatibility alias
 CURRENT_SESSION: Optional[SimulationSession] = None
-# A thread lock is required to prevent race conditions if multiple concurrent 
-# HTTP requests attempt to modify the environment state simultaneously.
 env_lock = threading.Lock()
+
+
+def _get_or_create_lock(session_id: str) -> threading.Lock:
+    with REGISTRY_LOCK:
+        if session_id not in SESSION_LOCKS:
+            SESSION_LOCKS[session_id] = threading.Lock()
+        return SESSION_LOCKS[session_id]
+
+
+def _resolve_session_id(
+    session_id_query: Optional[str] = None,
+    session_id_header: Optional[str] = None,
+    payload_session_id: Optional[str] = None,
+) -> str:
+    # Priority: Header -> Query -> Payload -> DEFAULT_SESSION_ID
+    if session_id_header is not None and not hasattr(session_id_header, "default") and session_id_header.strip():
+        return session_id_header.strip()
+    if session_id_query is not None and not hasattr(session_id_query, "default") and session_id_query.strip():
+        return session_id_query.strip()
+    if payload_session_id is not None and not hasattr(payload_session_id, "default") and payload_session_id.strip():
+        return payload_session_id.strip()
+    return DEFAULT_SESSION_ID
+
+
+def _get_session(session_id: str) -> SimulationSession:
+    """
+    Helper function to verify the active simulation session exists for given session_id.
+    Raises an HTTP 400 exception if an agent attempts to step before calling /reset.
+    """
+    with REGISTRY_LOCK:
+        session = ACTIVE_SESSIONS.get(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Environment not initialized for session '{session_id}'. Call /reset first."
+        )
+    return session
+
+
+def _ensure_initialized() -> None:
+    """
+    Legacy helper function for backward compatibility.
+    """
+    _get_session(DEFAULT_SESSION_ID)
 
 
 @app.get("/dashboard")
@@ -86,20 +134,12 @@ def get_command_center():
     return {"message": "command_center.html not found."}
 
 
-def _ensure_initialized() -> None:
-    """
-    Helper function to verify the active simulation session exists.
-    Raises an HTTP 400 exception if an agent attempts to step before calling /reset.
-    """
-    if CURRENT_SESSION is None:
-        raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
-
-
 @app.post("/reset")
 def reset(
     payload: Optional[Dict[str, Any]] = Body(default=None),
     task_name: Optional[str] = Query(default=None),
     seed: Optional[int] = Query(default=None),
+    session_id: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     """
     Endpoint to load an authorized benchmark task config and formally instantiate/reset the simulation session.
@@ -108,33 +148,32 @@ def reset(
         Only canonical benchmark tiers ('easy', 'medium', 'hard') and an optional RNG seed are accepted.
         Arbitrary configuration overrides are strictly forbidden to prevent evaluation gaming.
     
-    Args:
-        payload: Optional body containing `{"task_name": "<tier>", "seed": <int>}`.
-        task_name: Optional task name query parameter.
-        seed: Optional RNG seed query parameter.
-    Returns:
-        Observation: The initial state observation.
+    Multi-Tenant Support:
+        Supports independent concurrent sessions via optional `session_id`. Defaults to 'default'.
     """
     global CURRENT_SESSION
 
     try:
-        # Resolve task_name and seed with strict ResetPayload validation
+        # Resolve task_name, seed, and session_id with strict ResetPayload validation
         parsed_payload = {}
-        # In FastAPI direct python invocation or HTTP without body, payload might be None or a Body marker
         if payload is not None and not hasattr(payload, "default"):
             if not isinstance(payload, dict):
                 raise HTTPException(status_code=422, detail="Reset payload must be a JSON object.")
-            # Validate through ResetPayload (enforces extra='forbid' to block parameter injection)
             validated = ResetPayload.model_validate(payload)
             parsed_payload["task_name"] = validated.task_name
             parsed_payload["seed"] = validated.seed
+            parsed_payload["session_id"] = validated.session_id
 
         # Query parameters take priority if provided
         final_task = task_name if (task_name is not None and not hasattr(task_name, "default")) else parsed_payload.get("task_name", "easy")
         final_seed = seed if (seed is not None and not hasattr(seed, "default")) else parsed_payload.get("seed", None)
+        active_session_id = _resolve_session_id(
+            session_id_query=session_id, 
+            payload_session_id=parsed_payload.get("session_id")
+        )
 
         # Validate task through ResetPayload to guarantee canonical name
-        validated_task = ResetPayload(task_name=final_task, seed=final_seed)
+        validated_task = ResetPayload(task_name=final_task, seed=final_seed, session_id=active_session_id)
         session = SimulationSession.from_task_name(validated_task.task_name, seed=validated_task.seed)
 
     except FileNotFoundError:
@@ -144,79 +183,91 @@ def reset(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    with env_lock:
-        CURRENT_SESSION = session
+    s_lock = _get_or_create_lock(active_session_id)
+    with s_lock:
+        with REGISTRY_LOCK:
+            ACTIVE_SESSIONS[active_session_id] = session
+            if active_session_id == DEFAULT_SESSION_ID:
+                CURRENT_SESSION = session
 
-    return session.observation.model_dump()
+    obs_dict = session.observation.model_dump()
+    return obs_dict
 
 
 @app.post("/step")
-def step(action_dict: Dict[str, Any]) -> Dict[str, Any]:
+def step(
+    action_dict: Dict[str, Any],
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
     """
     Advances the simulation by one physical tick. 
     Accepts the agent's action and computes the resulting environment dynamics.
-    
-    Args:
-        action_dict (Dict): The proposed cooling allocations.
-        
-    Returns:
-        Dict: Contains the updated observation, the step reward, and the 'done' termination flag.
     """
-    # Verify environment has been loaded
-    _ensure_initialized()
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+    session = _get_session(active_session_id)
+    s_lock = _get_or_create_lock(active_session_id)
 
-    # Block other requests so physics simulation executes deterministically
-    with env_lock:
+    with s_lock:
         try:
-            return CURRENT_SESSION.step(action_dict)
+            return session.step(action_dict)
         except ValidationError as exc:
-            # Action schema payload verification fails
             raise HTTPException(status_code=422, detail=exc.errors())
         except ValueError as exc:
-            # Out of bounds or physics violation error
             raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/state")
-def get_full_state() -> Dict[str, Any]:
+def get_full_state(
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
     """
     Debugging endpoint exposing the entire internal data structure of the Simulation Session.
-    Useful for diagnostic or trajectory recording functions testing outside of normal flow.
     """
-    _ensure_initialized()
-    with env_lock:
-        return CURRENT_SESSION.model_dump()
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+    session = _get_session(active_session_id)
+    s_lock = _get_or_create_lock(active_session_id)
+    with s_lock:
+        return session.model_dump()
 
 
 @app.get("/score")
-def get_score() -> Dict[str, Any]:
+def get_score(
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
     """
     Computes and returns the evaluation score for the active simulation session.
     Requires at least one simulation step to have been executed.
     """
-    _ensure_initialized()
-    with env_lock:
-        if len(CURRENT_SESSION.history_actions) == 0:
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+    session = _get_session(active_session_id)
+    s_lock = _get_or_create_lock(active_session_id)
+    with s_lock:
+        if len(session.history_actions) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot score an unexecuted session. Take at least one step before requesting /score.",
             )
-        return CURRENT_SESSION.get_score()
+        return session.get_score()
 
 
 @app.post("/simulate")
-def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, Any]:
+def simulate(
+    task_name: str = "easy", 
+    cooling_level: float = 0.4,
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
     """
     Runs a full simulation from start to finish using a fixed cooling policy.
     Returns the final trajectory grade and performance metrics.
     """
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+
     try:
-        initial_observation = reset(payload=None, task_name=task_name)
+        initial_observation = reset(payload=None, task_name=task_name, session_id=active_session_id)
         obs_dict = initial_observation if isinstance(initial_observation, dict) else initial_observation.model_dump()
-        
-        with env_lock:
-            config = CURRENT_SESSION.config
-            num_zones = config.num_zones
+        session = _get_session(active_session_id)
+        config = session.config
+        num_zones = config.num_zones
 
     except HTTPException as exc:
         raise HTTPException(status_code=exc.status_code, detail=f"Error resetting environment: {exc.detail}")
@@ -231,7 +282,7 @@ def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, A
     while not done:
         action = {"cooling": [cooling_level] * num_zones}
         try:
-            step_result = step(action)
+            step_result = step(action, session_id=active_session_id)
         except HTTPException as exc:
             raise HTTPException(status_code=exc.status_code, detail=f"Error stepping environment: {exc.detail}")
 

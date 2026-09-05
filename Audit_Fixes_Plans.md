@@ -897,6 +897,84 @@ Add concurrency and isolation test `test_multi_tenant_session_isolation`:
 1. Run `pytest tests/test_api_security.py -v`.
 2. Run full regression test suite (`37/37+` tests).
 
+**Status**: ✅ **Completed & Verified**
+- Implemented `ACTIVE_SESSIONS` multi-tenant dictionary registry with per-session thread locks in `core/env.py`.
+- Preserved single-tenant fallback to `DEFAULT_SESSION_ID = "default"`.
+- Added multi-tenant concurrent state isolation unit test `test_multi_tenant_session_isolation` in `tests/test_api_security.py`.
+- Full regression suite passed (38/38 tests passing).
+
+---
+
+### 12. Fix Plan for M2: Observation Space Lacks Goal Parameters (Non-Markovian State)
+
+#### Overview
+In `core/models.py`:
+```python
+class Observation(BaseModel):
+    temperatures: List[float] = Field(..., min_length=1)  # °C per zone
+    workloads: List[float] = Field(..., min_length=1)     # normalized workload index [0,1] per zone
+    cooling: List[float] = Field(..., min_length=1)       # last applied cooling level tracking buffer
+    ambient_temp: float = Field(..., description="Ambient temperature in Celsius")
+    time_step: int = Field(..., ge=0)
+```
+The raw HTTP / API observation model does **not** include `target_temperature` or `safe_temperature`. 
+An autonomous RL agent, LLM agent, or remote client receiving this observation payload does not know:
+1. What temperature it is supposed to regulate toward (`target_temperature`).
+2. What critical threshold triggers equipment destruction (`safe_temperature`).
+
+To know the goals, an agent is currently forced to read local benchmark JSON files from disk out-of-band. For a truly autonomous OpenEnv environment running remotely over HTTP, this makes the observation non-Markovian and breaks remote agent autonomy.
+
+#### Architecture of Solution
+```
+[Before: Blind Agent]
+Observation ──> {temps, workloads, cooling, ambient, step}
+                  └── Missing: target_temperature? safe_temperature?
+                  └── Agent must peek into disk JSON config!
+
+                               │
+                               ▼  REMEDIATION
+[After: Goal-Conditioned Markovian Observation with Backward Compatibility]
+Observation ──> {
+  temps, workloads, cooling, ambient, step,
+  target_temperature: Optional[float] = None,  # Backward compatible default
+  safe_temperature: Optional[float] = None     # Backward compatible default
+}
+1. In `core/models.py`: Add `target_temperature: Optional[float] = None` and `safe_temperature: Optional[float] = None`.
+2. In `core/simulator.py`: Populate `target_temperature=config.target_temperature` and `safe_temperature=config.safe_temperature` during session initialization and step transitions.
+3. In `dynamics/thermal_model.py`: Forward `target_temperature` and `safe_temperature` from the previous observation or task config to the next observation.
+4. Compatibility: Since default values are `None`, existing test fixtures creating synthetic `Observation(...)` without these keys continue to pass with 0 breakages.
+```
+
+#### Detailed File Changes
+
+##### 1. `core/models.py` (MODIFY)
+Add optional goal fields to `Observation`:
+```python
+class Observation(BaseModel):
+    temperatures: List[float] = Field(..., min_length=1)  # °C per zone
+    workloads: List[float] = Field(..., min_length=1)     # normalized workload index [0,1] per zone
+    cooling: List[float] = Field(..., min_length=1)       # last applied cooling level tracking buffer
+    ambient_temp: float = Field(..., description="Ambient temperature in Celsius")
+    time_step: int = Field(..., ge=0)
+    target_temperature: Optional[float] = Field(None, description="Regulation setpoint goal (°C)")
+    safe_temperature: Optional[float] = Field(None, description="Critical upper safety threshold (°C)")
+```
+
+##### 2. `core/simulator.py` (MODIFY)
+Pass `target_temperature=config.target_temperature` and `safe_temperature=config.safe_temperature` in `SimulationSession.__init__`.
+
+##### 3. `dynamics/thermal_model.py` (MODIFY)
+Propagate `target_temperature=config.target_temperature` and `safe_temperature=config.safe_temperature` in `apply_transition`.
+
+##### 4. `tests/test_submission_readiness.py` (ADD)
+Verify that `/reset` and `/step` return observations containing `target_temperature` and `safe_temperature`.
+
+#### Verification & Testing
+1. Run `pytest tests/test_submission_readiness.py -v`.
+2. Run full regression suite (`tests/test_baselines.py`, `tests/test_api_security.py`, `tests/reward/test_reward_fn.py`, `tests/grader/test_evaluator.py`, `tests/dynamics/test_thermal_model.py`).
+3. Confirm all baseline agents continue to function smoothly.
+
+
 
 
 
