@@ -57,4 +57,6 @@ def apply_transition(
         cooling=cooling.tolist(),
         ambient_temp=ambient_temp,
         time_step=obs.time_step + 1,
+        target_temperature=config.target_temperature,
+        safe_temperature=config.safe_temperature,
     )

@@ -974,6 +974,60 @@ Verify that `/reset` and `/step` return observations containing `target_temperat
 2. Run full regression suite (`tests/test_baselines.py`, `tests/test_api_security.py`, `tests/reward/test_reward_fn.py`, `tests/grader/test_evaluator.py`, `tests/dynamics/test_thermal_model.py`).
 3. Confirm all baseline agents continue to function smoothly.
 
+**Status**: ✅ **Completed & Verified**
+- Added `target_temperature` and `safe_temperature` to `Observation` in `core/models.py`.
+- Populated goal parameters across `core/simulator.py` and `dynamics/thermal_model.py`.
+- Verified in `tests/test_submission_readiness.py`.
+- Full regression suite passed (38/38 tests passing).
+
+---
+
+### 13. Fix Plan for M3: Lack of Multi-Seed Statistical Evaluation
+
+#### Overview
+In standard evaluation scripts (`sample_run.py`), evaluation is performed on exactly one fixed seed per tier (`101`, `202`, `303`).
+A single deterministic seed cannot measure:
+1. Controller robustness against volatility.
+2. Performance variance / standard deviations across initial temperature perturbations.
+3. Statistically rigorous confidence intervals.
+
+In C1, we built `run_benchmark.py` which evaluates across multiple seeds (`[42, 101, 202, 303, 404]`). To complete remediation of M3:
+1. Extend `sample_run.py` to support multi-seed evaluation via CLI argument `--seeds` (e.g. `--seeds 42 101 202` or `--num-seeds 5`).
+2. Aggregate mean and standard deviation scores in the terminal Rich table summary.
+3. Add a dedicated test in `tests/test_baselines.py` verifying that multi-seed evaluation produces accurate statistics.
+
+#### Architecture of Solution
+```
+[Single Seed Evaluation]
+sample_run.py ──> Seed 101 only ──> Single point score (High variance / risk of overfit)
+
+                               │
+                               ▼  REMEDIATION
+[Statistical Multi-Seed Evaluation]
+sample_run.py --seeds 42 101 202 303 404 (or --num-seeds 3)
+  └── Evaluates each tier across N distinct seeds via POST /reset {"seed": s}
+  └── Computes Mean Score ± Std Dev
+  └── Renders statistical summary table in Rich console
+```
+
+#### Detailed File Changes
+
+##### 1. `sample_run.py` (MODIFY)
+- Add `argparse` support to `main()` with `--seeds` (list of ints) and `--num-seeds` (int).
+- If `--seeds` or `--num-seeds` is specified, execute each task over the seed set, computing `mean` and `std`.
+- Update `print_final_summary` to optionally display `mean ± std`.
+
+##### 2. `tests/test_baselines.py` (ADD)
+Add test `test_multi_seed_evaluation_computes_statistics`:
+- Call `evaluate_agent_on_task(RuleBasedController(), "easy", seeds=[42, 101, 202])`.
+- Assert output contains `mean`, `std`, and length of seeds equals 3.
+
+#### Verification & Testing
+1. Run `pytest tests/test_baselines.py -v`.
+2. Run `python sample_run.py --help` to confirm CLI flags.
+3. Run full regression test suite.
+
+
 
 
 

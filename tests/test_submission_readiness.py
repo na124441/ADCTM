@@ -126,11 +126,17 @@ def test_api_exposes_reset_step_state_for_root_submission(monkeypatch):
 
     reset_response = client.post("/reset")
     assert reset_response.status_code == 200
+    reset_obs = reset_response.json()
+    assert "target_temperature" in reset_obs
+    assert "safe_temperature" in reset_obs
+    assert reset_obs["target_temperature"] is not None
 
     step_response = client.post("/step", json={"cooling": [0.2, 0.2, 0.2]})
     assert step_response.status_code == 200
     payload = step_response.json()
     assert {"observation", "reward", "done", "info"} <= payload.keys()
+    assert payload["observation"]["target_temperature"] is not None
+    assert payload["observation"]["safe_temperature"] is not None
 
     state_response = client.get("/state")
     assert state_response.status_code == 200

@@ -176,12 +176,15 @@ This document serves as the master register of all material engineering, ML/RL, 
 ---
 
 
-#### Problem ID: M2 — Observation Space Lacks Goal Parameters (Non-Markovian from Observation Alone)
+#### Problem ID: M2 — Observation Space Lacks Goal Parameters (Non-Markovian from Observation Alone) ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
-- **Subsystem**: `core/models.py` (Lines 10–20)
+- **Subsystem**: `core/models.py` (Lines 10–20), `core/simulator.py`, `dynamics/thermal_model.py`
+- **Status**: ✅ RESOLVED — Added optional goal fields `target_temperature` and `safe_temperature` to `Observation` in `core/models.py`. Populated them automatically from active `TaskConfig` during session initialization and step transitions. Verified in `test_api_exposes_reset_step_state_for_root_submission` in `tests/test_submission_readiness.py`.
 - **Problem**: The `Observation` model exposes temperatures, workloads, cooling, ambient temp, and step. It does **not** include `safe_temperature` or `target_temperature`. The agent must read local JSON task configuration files out-of-band to know its goal.
+- **Why it matters**: A remote agent communicating with the server over HTTP cannot know what temperature to regulate toward or what safe boundary to avoid without out-of-band file access.
 
 ---
+
 
 #### Problem ID: M3 — Lack of Multi-Seed Statistical Evaluation
 - **Severity**: 🟡 MEDIUM

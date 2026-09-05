@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for ADCTM Gymnasium Environment Adapter and Classical Baselines.
 Protects C1 remediation by enforcing behavioral contracts on all controllers and RL env.
 """
@@ -83,3 +83,17 @@ def test_rl_agent_fallback_behavior():
     assert len(action) == 3
     for a in action:
         assert 0.0 <= a <= 1.0
+
+
+def test_multi_seed_evaluation_computes_statistics():
+    from run_benchmark import evaluate_agent_on_task
+    controller = RuleBasedController()
+    seeds = [42, 101, 202]
+    res = evaluate_agent_on_task(controller, "easy", seeds=seeds)
+    assert "mean" in res
+    assert "std" in res
+    assert "scores" in res
+    assert len(res["scores"]) == 3
+    assert 0.0 <= res["mean"] <= 1.0
+    assert res["std"] >= 0.0
+

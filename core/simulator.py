@@ -34,6 +34,8 @@ class SimulationSession:
             cooling=[0.0] * config.num_zones,
             ambient_temp=config.ambient_temperature,
             time_step=0,
+            target_temperature=config.target_temperature,
+            safe_temperature=config.safe_temperature,
         )
         self.step_counter = 0
         self.done = False

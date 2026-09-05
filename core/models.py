@@ -12,11 +12,14 @@ class Observation(BaseModel):
     Represents the full observable state of the environment.
     Sent to the agent at every step simulating hardware sensors.
     """
-    temperatures: List[float] = Field(..., min_length=1)  # Â°C per zone
+    temperatures: List[float] = Field(..., min_length=1)  # °C per zone
     workloads: List[float] = Field(..., min_length=1)     # normalized workload index [0,1] per zone
     cooling: List[float] = Field(..., min_length=1)       # last applied cooling level tracking buffer
     ambient_temp: float = Field(..., description="Ambient temperature in Celsius")
     time_step: int = Field(..., ge=0)
+    target_temperature: Optional[float] = Field(None, description="Regulation setpoint goal (°C)")
+    safe_temperature: Optional[float] = Field(None, description="Critical upper safety threshold (°C)")
+
 
     @model_validator(mode='after')
     def same_length(self) -> 'Observation':

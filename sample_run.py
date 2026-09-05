@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Complementary OpenEnv Baseline Inference Script.
 Runs a trajectory roll-out for the three benchmark tasks (easy, medium, hard)
@@ -22,6 +22,8 @@ import sys
 
 from openai import OpenAI
 from dotenv import load_dotenv
+import numpy as np
+
 
 # ----------------------------------------------------------------------
 # 2️⃣  Rich-based printing utilities (copied from printer.py)
@@ -502,27 +504,37 @@ def call_llm(
 from tasks.task_config import TaskConfig
 from grader.evaluator import evaluate_trajectory
 
-def run_task(task_name: str) -> float:
-    """Run a whole episode for *task_name* and return the graded score."""
+def run_task(task_name: str, seed: Optional[int] = None) -> float:
+    """Run a whole episode for *task_name* with optional *seed* and return the graded score."""
     # --------------------------------------------------------------
     # Header for this task
     # --------------------------------------------------------------
+    label_suffix = f" (seed: {seed})" if seed is not None else ""
     print_task_start(task_name)
+    if seed is not None:
+        print_info(f"Running task '{task_name}' with explicit RNG seed: {seed}")
 
     # --------------------------------------------------------------
     # Reset the environment and fetch the initial observation
     # --------------------------------------------------------------
+    reset_payload: Dict[str, Any] = {"task_name": task_name}
+    if seed is not None:
+        reset_payload["seed"] = seed
+
     try:
         resp = requests.post(
             f"{ENV_URL}/reset",
-            json={"task_name": task_name},
+            json=reset_payload,
             timeout=30,
         )
         if resp.status_code != 200:
-            # Some services expose a GET-style reset
+            # Fallback to query params
+            params: Dict[str, Any] = {"task_name": task_name}
+            if seed is not None:
+                params["seed"] = seed
             resp = requests.post(
                 f"{ENV_URL}/reset",
-                params={"task_name": task_name},
+                params=params,
                 timeout=30,
             )
         resp.raise_for_status()
@@ -543,6 +555,9 @@ def run_task(task_name: str) -> float:
 
     with open(task_cfg_path, "r", encoding="utf-8") as f:
         cfg_dict = json.load(f)
+
+    if seed is not None:
+        cfg_dict["seed"] = seed
 
     config = TaskConfig(**cfg_dict)
 
@@ -633,7 +648,7 @@ def run_task(task_name: str) -> float:
     # Display the per-task result panel
     # --------------------------------------------------------------
     print_task_result(
-        task_name=task_name,
+        task_name=f"{task_name}{label_suffix}",
         score=graded_score,
         steps=step_idx,
         rewards=rewards,
@@ -648,6 +663,13 @@ def run_task(task_name: str) -> float:
 # ----------------------------------------------------------------------
 def main() -> None:
     """Execute easy / medium / hard tasks and show a coloured summary."""
+    import argparse
+    parser = argparse.ArgumentParser(description="ADCTM Baseline Inference & Benchmark Runner")
+    parser.add_argument("--seeds", nargs="+", type=int, default=None, help="List of random seeds to evaluate")
+    parser.add_argument("--num-seeds", type=int, default=1, help="Number of random seeds to evaluate (default: 1)")
+    parser.add_argument("--task", type=str, choices=["all", "easy", "medium", "hard"], default="all", help="Specific task to run")
+    args = parser.parse_args()
+
     # ----- Banner & connection notice -----
     print_banner(MODEL_NAME, ENV_URL)
     print_connecting(ENV_URL)
@@ -659,16 +681,33 @@ def main() -> None:
         )
         return
 
-    # ----- Run the three benchmark tasks -----
-    task_names = ["easy", "medium", "hard"]
+    # ----- Determine seeds to evaluate -----
+    if args.seeds is not None:
+        eval_seeds = args.seeds
+    elif args.num_seeds > 1:
+        eval_seeds = [101 * (i + 1) for i in range(args.num_seeds)]
+    else:
+        eval_seeds = [None]  # Use default task file seed
+
+    # ----- Run the benchmark tasks -----
+    task_names = ["easy", "medium", "hard"] if args.task == "all" else [args.task]
     results: Dict[str, float] = {}
+    stats: Dict[str, Dict[str, float]] = {}
 
     for tn in task_names:
-        try:
-            results[tn] = run_task(tn)
-        except Exception as exc:
-            print_error(f"Execution error on task '{tn}': {exc}")
-            results[tn] = 0.0
+        seed_scores = []
+        for s in eval_seeds:
+            try:
+                sc = run_task(tn, seed=s)
+                seed_scores.append(sc)
+            except Exception as exc:
+                print_error(f"Execution error on task '{tn}' (seed: {s}): {exc}")
+                seed_scores.append(0.0)
+
+        mean_sc = float(np.mean(seed_scores))
+        std_sc = float(np.std(seed_scores)) if len(seed_scores) > 1 else 0.0
+        results[tn] = mean_sc
+        stats[tn] = {"mean": mean_sc, "std": std_sc}
 
     # ----- Final aggregated summary table -----
     print_final_summary(results)
