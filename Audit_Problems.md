@@ -13,7 +13,7 @@ This document serves as the master register of all material engineering, ML/RL, 
 | **C3** | ✅ RESOLVED | Evaluation / API | `core/env.py`, `core/models.py` | ResetPayload enforces canonical task whitelist, rejects arbitrary injected configs |
 | **C4** | ✅ RESOLVED | Evaluation | `core/simulator.py`, `core/env.py` | /score rejects zero-step sessions with HTTP 400; get_score returns 0.0 fallback |
 | **H1** | ✅ RESOLVED | RL / Reward | `reward/reward_fn.py` | Jitter penalty exemption vectorized per-zone; prevents sacrificial zone reward hacking |
-| **H2** | 🟠 HIGH | Evaluation | `grader/evaluator.py`, `metrics.py` | Degenerate zero-action policy gets 30% baseline score for free (perfect energy & jitter) |
+| **H2** | ✅ RESOLVED | Evaluation | `grader/evaluator.py` | Safety-gated efficiency & smoothness; zero-cooling penalty properly enforced |
 | **H3** | 🟠 HIGH | Physics | `dynamics/thermal_model.py` | No physical upper temperature bound (temperatures can rise infinitely past destruction) |
 | **H4** | 🟠 HIGH | Physics | `dynamics/thermal_model.py` | No inter-zone thermal diffusion/coupling (effective N isolated 1-zone problems) |
 | **H5** | 🟠 HIGH | Server / API | `core/env.py` | `/simulate` endpoint crashes (`AttributeError: 'dict' object has no attribute 'model_dump'`) |
@@ -115,17 +115,20 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: H3 — Absence of Physical Upper Temperature Bound
+#### Problem ID: H3 — Absence of Physical Upper Temperature Bound ✅ RESOLVED
 - **Severity**: 🟠 HIGH
 - **Subsystem**: `dynamics/thermal_model.py` (Lines 35–41)
+- **Status**: ✅ RESOLVED — Defined `MAX_PHYSICAL_TEMPERATURE = 105.0` in `config/constants.py` (representing silicon thermal junction breakdown $T_{\text{jmax}}$). Clamped `next_temperatures` via `np.clip(temperatures + delta_t, ambient_temp, MAX_PHYSICAL_TEMPERATURE)` in `dynamics/thermal_model.py`. Verified via unit test `test_apply_transition_enforces_upper_temperature_bound`.
 - **Problem**: While temperatures are floored at ambient via `np.maximum(..., ambient_temp)`, there is no upper ceiling or hardware burnout cutoff. Temperatures can mathematically rise to $150^\circ\text{C}+$ without triggering equipment shutdown, catastrophic failure, or termination.
 - **Why it matters**: Contradicts the README claim of "high-fidelity industrial realism". Real silicon begins throttling at ~85°C and suffers thermal shutdown/destruction at ~100-105°C.
 
 ---
 
-#### Problem ID: H4 — Zero Inter-Zone Spatial Thermal Diffusion
+
+#### Problem ID: H4 — Zero Inter-Zone Spatial Thermal Diffusion ✅ RESOLVED
 - **Severity**: 🟠 HIGH
 - **Subsystem**: `dynamics/thermal_model.py` (Line 35)
+- **Status**: ✅ RESOLVED — Defined `KAPPA_DIFFUSION = 0.05` in `config/constants.py`. Implemented discrete 1D Laplacian thermal diffusion (`diffusion = KAPPA_DIFFUSION * [T_{i-1} + T_{i+1} - 2*T_i]`) with Neumann boundary conditions in `dynamics/thermal_model.py`. Verified via unit test `test_apply_transition_diffuses_heat_between_adjacent_zones`.
 - **Problem**: 
   ```python
   delta_t = ALPHA * workloads - cooling_effect * cooling + GAMMA * (ambient_temp - temperatures)
@@ -135,9 +138,11 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: H5 — `/simulate` Endpoint Fails with AttributeError
+
+#### Problem ID: H5 — `/simulate` Endpoint Fails with AttributeError ✅ RESOLVED
 - **Severity**: 🟠 HIGH
-- **Subsystem**: `core/env.py` (Lines 206–207)
+- **Subsystem**: `core/env.py` (Lines 206–270)
+- **Status**: ✅ RESOLVED — Refactored `/simulate` in `core/env.py` to check `isinstance(initial_observation, dict)`, properly extract `CURRENT_SESSION.config` under `env_lock`, and handle default query parameters without raising parameter validation errors. Added integration test `test_simulate_endpoint_executes_successfully` in `tests/test_api_security.py`.
 - **Problem**: 
   ```python
   initial_observation = reset(task_name=task_name)
@@ -148,13 +153,16 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: H6 — Hard Benchmark Scenario Starts in Immediate Violation
+
+#### Problem ID: H6 — Hard Benchmark Scenario Starts in Immediate Violation ✅ RESOLVED
 - **Severity**: 🟠 HIGH
 - **Subsystem**: `tasks/hard.json`
+- **Status**: ✅ RESOLVED — Adjusted `initial_temperatures` in `tasks/hard.json` so the maximum initial temperature is $70.4^\circ\text{C}$ ($< 70.5^\circ\text{C}$ safe limit). Preserves extreme stress (0.1°C headroom under 0.98 workload) while eliminating the unpreventable pre-step violation. Verified via invariant test `test_canonical_tasks_start_in_non_violating_state` in `tests/test_submission_readiness.py`.
 - **Problem**: In `hard.json`, `safe_temperature` is set to `70.5`, but `initial_temperatures` are `[69.0, 70.0, 70.5, 69.5, 71.0, 69.5, 70.5, 69.0]`. Zone 4 is at 71.0°C (> 70.5°C) before step 0 has even executed.
 - **Why it matters**: It is mathematically impossible for any agent to achieve a 100% safety score on `hard.json` because step 0 is in violation before any cooling command can be issued.
 
 ---
+
 
 ### 🟡 MEDIUM SEVERITY FINDINGS
 

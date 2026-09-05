@@ -71,3 +71,16 @@ def test_score_succeeds_after_valid_step(client):
     assert "total" in data
     assert "metrics" in data
     assert 0.0 <= data["total"] <= 1.0
+
+
+def test_simulate_endpoint_executes_successfully(client):
+    # Verify that POST /simulate completes a full rollout without AttributeError crash
+    response = client.post("/simulate", params={"task_name": "easy", "cooling_level": 0.4})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    assert data["task"] == "easy"
+    assert data["steps"] > 0
+    assert "score" in data
+    assert 0.0 <= data["score"] <= 1.0
+

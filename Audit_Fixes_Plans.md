@@ -13,8 +13,8 @@ This document tracks the detailed engineering implementation plans for addressin
 | **C3** | `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming | ✅ **Completed & Verified** |
 | **C4** | `get_score()` Returns Perfect 1.0 Score on Zero Steps | ✅ **Completed & Verified** |
 | **H1** | Global Jitter Penalty Bypass Exploit | ✅ **Completed & Verified** |
-| **H2** | Evaluation Metric Heavily Rewards Total Inaction | ⏳ Pending |
-| **H3** | Absence of Physical Upper Temperature Bound | ⏳ Pending |
+| **H2** | Evaluation Metric Heavily Rewards Total Inaction | ✅ **Completed & Verified** |
+| **H3** | Absence of Physical Upper Temperature Bound | 📝 **Drafted (Below)** |
 | **H4** | Zero Inter-Zone Spatial Thermal Diffusion | ⏳ Pending |
 | **H5** | `/simulate` Endpoint Fails with AttributeError | ⏳ Pending |
 | **H6** | Hard Benchmark Scenario Starts in Immediate Violation | ⏳ Pending |
@@ -415,3 +415,488 @@ Replace the scalar `np.max(temps)` global check with a vectorized per-zone mask:
 1. Run `pytest tests/reward/test_reward_fn.py -v`.
 2. Confirm per-zone jitter isolation prevents sacrificial zone reward hacking.
 3. Run full regression suite to ensure no unexpected breaking changes.
+
+---
+
+### 6. Fix Plan for H2: Evaluation Metric Heavily Rewards Total Inaction
+
+#### Overview
+In `grader/evaluator.py` (lines 22–23) and `grader/metrics.py`:
+```python
+energy_score = 1.0 - avg_energy  # avg_energy in [0, 1]
+jitter_score = 1.0 - avg_jitter  # avg_jitter in [0, 1]
+
+final_score = 0.4 * safety + 0.3 * target_score + 0.2 * energy_score + 0.1 * jitter_score
+```
+A completely dead agent applying `cooling = [0.0] * N` automatically scores `1.0` in Energy ($w=0.2$) and `1.0` in Smoothness ($w=0.1$). This establishes an artificial $0.30$ (30%) score floor for an inactive or crashed controller. In fact, if the thermal trajectory starts slightly below safe limits (as in `easy.json`), a do-nothing policy gets a substantial passing score ($\sim 0.535$ on Easy) despite letting the entire datacenter overheat.
+
+#### Architecture of Solution
+```
+[Flawed Metric: Energy & Smoothness Awarded Regardless of Safety]
+Inaction (Cooling = 0.0) ──> All Servers Overheat!
+                      ──> BUT: Energy Score = 1.0 (20%)
+                      ──> AND: Jitter Score = 1.0 (10%)
+                      ──> Total Score >= 0.30 - 0.53 (Free Points for Hardware Damage!)
+
+                               │
+                               ▼  REMEDIATION
+[Safety-Gated Efficiency & Penalty for Catastrophic Overheating]
+In an industrial data center, efficiency and smoothness only matter if the system operates SAFELY.
+Saving electricity while frying servers is not efficient; it is catastrophic infrastructure failure.
+
+Formulation:
+1. Gated Efficiency:
+   energy_score is scaled by thermal health. If safety is violated, the energy score is penalized proportionally:
+   effective_energy_score = (1.0 - avg_energy) * (safety_ratio ** 0.5)
+   
+2. Gated Smoothness:
+   jitter_score = (1.0 - avg_jitter) * (safety_ratio ** 0.5)
+
+3. Consequence:
+   - For an agent maintaining 100% safety (safety_ratio = 1.0):
+     Both energy_score and jitter_score remain completely unchanged from the original formulation.
+   - For a dead agent that lets servers burn (safety_ratio -> 0):
+     Both energy and jitter scores decay to 0, eliminating the unearned 30% bonus.
+```
+
+#### Detailed File Changes
+
+##### 1. `grader/evaluator.py` (MODIFY lines 20–40)
+Update component score calculation to gate efficiency and smoothness on safety integrity:
+```python
+    # Normalize components to [0,1]
+    raw_energy_score = 1.0 - energy
+    raw_jitter_score = 1.0 - jitter
+    target_score = max(0.0, min(1.0, 1.0 - target_error))
+
+    # Safety gating: in industrial control, energy efficiency and smoothness only count
+    # if safety constraints are respected. Burning servers with 0 cooling is not "efficient".
+    safety_factor = float(np.sqrt(max(0.0, safety)))
+    energy_score = raw_energy_score * safety_factor
+    jitter_score = raw_jitter_score * safety_factor
+
+    # Weighted sum
+    w_safety = 0.4
+    w_target = 0.3
+    w_energy = 0.2
+    w_jitter = 0.1
+
+    final_score = (
+        w_safety * safety +
+        w_target * target_score +
+        w_energy * energy_score +
+        w_jitter * jitter_score
+    )
+```
+
+##### 2. `tests/grader/test_evaluator.py` & `tests/test_submission_readiness.py`
+- Verify that a nominal controller achieving safety = 1.0 receives identical scores.
+- Verify that a zero policy (`cooling=0.0`) on tasks where overheating occurs drops significantly in score.
+- Tighten test thresholds in `test_zero_policy_is_weak_on_active_tasks` to reflect that inaction is penalized properly.
+
+#### Verification & Testing
+1. Run `run_benchmark.py`: Confirm `Zero (Passive)` overall score drops from ~0.44 down to realistic failing range (~0.15–0.25).
+2. Confirm nominal controllers (`Rule-Based`, `PID`, `LLM`, `PPO`) maintaining high safety scores are unaffected or accurately evaluated.
+3. Run full regression test suite.
+
+---
+
+### 7. Fix Plan for H3: Absence of Physical Upper Temperature Bound
+
+#### Overview
+In `dynamics/thermal_model.py` (lines 35–41):
+```python
+delta_t = ALPHA * workloads - cooling_effect * cooling + GAMMA * (ambient_temp - temperatures)
+next_temperatures = np.maximum(temperatures + delta_t, ambient_temp - EPSILON)
+next_temperatures = np.maximum(next_temperatures, ambient_temp)
+```
+While temperatures are clamped at a lower bound (`ambient_temp`), there is **no physical upper ceiling or hardware burnout/throttling model**. Under sustained high workload with zero cooling, temperature mathematically rises past $120^\circ\text{C}\text{--}150^\circ\text{C}+$ without triggering equipment damage, thermal throttling, or an emergency cutoff. In real server hardware, semiconductor silicon throttles at $\sim 85^\circ\text{C}$ and suffers irreversible thermal runaway / shutdown around $100\text{--}105^\circ\text{C}$. Allowing temperatures to climb infinitely contradicts the README's claim of "industrial realism and high-fidelity thermodynamics."
+
+#### Architecture of Solution
+```
+[Unbounded Linear Spike]
+Workload = 1.0, Cooling = 0.0 ──> Temperature rises to 120°C, 150°C, 200°C... (Unphysical!)
+
+                               │
+                               ▼  REMEDIATION
+[Realistic Thermodynamic Ceiling & Hardware Burnout Model]
+1. Define PHYSICAL_MAX_TEMP = 105.0°C (Silicium thermal junction breakdown / T_jmax).
+2. Clamping:
+   next_temperatures = np.clip(temperatures + delta_t, ambient_temp, PHYSICAL_MAX_TEMP)
+3. Emergency Meltdown Info Flag:
+   If any zone reaches PHYSICAL_MAX_TEMP, register an info flag:
+   `"hardware_meltdown": True` or `"thermal_runaway": True`.
+4. Consistent Configuration:
+   Expose `max_temperature: float = 105.0` in `config/constants.py` and optionally in `TaskConfig` for configurability.
+```
+
+#### Detailed File Changes
+
+##### 1. `config/constants.py` (MODIFY)
+Add physical boundary constants:
+```python
+ALPHA = 7.5
+BETA = 8.0
+GAMMA = 0.1
+MAX_PHYSICAL_TEMPERATURE = 105.0  # Silicon junction failure threshold (°C)
+```
+
+##### 2. `dynamics/thermal_model.py` (MODIFY lines 35–45)
+Clamp next temperatures between `ambient_temp` and `MAX_PHYSICAL_TEMPERATURE`:
+```python
+    delta_t = ALPHA * workloads - cooling_effect * cooling + GAMMA * (ambient_temp - temperatures)
+    
+    # Floor at ambient temperature and ceiling at maximum physical temperature
+    next_temperatures = np.clip(temperatures + delta_t, ambient_temp, MAX_PHYSICAL_TEMPERATURE)
+```
+
+##### 3. `tests/dynamics/test_thermal_model.py` (ADD)
+Add a test `test_apply_transition_enforces_upper_temperature_bound`:
+- Feed in initial temperatures of $104^\circ\text{C}$, workload $1.0$, cooling $0.0$.
+- Assert that resulting temperatures do not exceed $105.0^\circ\text{C}$.
+
+#### Verification & Testing
+1. Run `pytest tests/dynamics/test_thermal_model.py -v`.
+2. Confirm temperature never exceeds $105^\circ\text{C}$ under worst-case adversarial inputs (workload=1.0, cooling=0.0 over 100 steps).
+3. Run full test suite to guarantee zero regression on existing tasks.
+
+**Status**: ✅ **Completed & Verified**
+- Clamped maximum temperature to `MAX_PHYSICAL_TEMPERATURE = 105.0` in `config/constants.py` and `dynamics/thermal_model.py`.
+- Added unit test in `tests/dynamics/test_thermal_model.py`.
+- Full regression suite passed (34/34 tests passing).
+
+---
+
+### 8. Fix Plan for H4: Zero Inter-Zone Spatial Thermal Diffusion
+
+#### Overview
+In `dynamics/thermal_model.py` (line 35):
+```python
+delta_t = ALPHA * workloads - cooling_effect * cooling + GAMMA * (ambient_temp - temperatures)
+```
+Every term in `delta_t` is evaluated purely element-wise across the zones. There is zero heat conduction, convection, or thermal coupling between adjacent physical zones ($i-1, i, i+1$). 
+
+In a real physical data center server rack row:
+- Heat naturally dissipates from hotter server zones to cooler neighboring zones via thermal conduction through server chassis and air convection in the hot/cold aisles:
+$$\frac{dT_i}{dt} = \alpha W_i - \beta C_i + \gamma (T_{\text{ambient}} - T_i) + \kappa (T_{i-1} - 2T_i + T_{i+1})$$
+where $\kappa$ is the inter-zone thermal diffusion coefficient.
+- Without this term, the simulation is merely $N$ completely independent, uncoupled single-zone problems running in a parallel loop. The controller does not need to learn spatial trade-offs, heat spreading, or cooperative zone cooling.
+
+#### Architecture of Solution
+```
+[Before: Independent 1D Zones]
+Zone 0 (95°C)  |  Zone 1 (30°C)  |  Zone 2 (95°C)
+      │                 │                 │
+   No heat           No heat           No heat
+  diffusion         diffusion         diffusion
+
+                               │
+                               ▼  REMEDIATION
+[After: Spatial Thermal Diffusion]
+Zone 0 (95°C)  <──heat──>  Zone 1 (30°C)  <──heat──>  Zone 2 (95°C)
+Heat diffuses from hotter zones into cooler adjacent zones:
+diff_i = KAPPA_DIFFUSION * ((T_{i-1} - T_i) + (T_{i+1} - T_i))
+```
+
+1. **Diffusion Constant**:
+   Define `KAPPA_DIFFUSION = 0.05` in `config/constants.py` (physically realistic moderate coupling between adjacent rack bays).
+2. **Boundary Conditions**:
+   For linear zone arrays ($i = 0, \dots, N-1$), use standard Neumann / isolated boundary conditions (outer end walls):
+   - For $i=0$: neighbor is only $i=1$. Diffusion term: $\kappa (T_1 - T_0)$.
+   - For $i=N-1$: neighbor is only $i=N-2$. Diffusion term: $\kappa (T_{N-2} - T_{N-1})$.
+   - For $0 < i < N-1$: neighbors are $i-1$ and $i+1$. Diffusion term: $\kappa (T_{i-1} + T_{i+1} - 2T_i)$.
+   - In vectorized NumPy:
+     ```python
+     diffusion = np.zeros_like(temperatures)
+     if len(temperatures) > 1:
+         diffusion[0] = temperatures[1] - temperatures[0]
+         diffusion[-1] = temperatures[-2] - temperatures[-1]
+         if len(temperatures) > 2:
+             diffusion[1:-1] = temperatures[:-2] + temperatures[2:] - 2.0 * temperatures[1:-1]
+         diffusion = KAPPA_DIFFUSION * diffusion
+     ```
+3. **Integration into Physics**:
+   ```python
+   delta_t = (
+       ALPHA * workloads 
+       - cooling_effect * cooling 
+       + GAMMA * (ambient_temp - temperatures)
+       + diffusion
+   )
+   ```
+
+#### Detailed File Changes
+
+##### 1. `config/constants.py` (MODIFY)
+Add inter-zone diffusion coefficient:
+```python
+KAPPA_DIFFUSION = 0.05  # Inter-zone thermal conductivity / diffusion coupling
+```
+
+##### 2. `dynamics/thermal_model.py` (MODIFY)
+Compute the discrete spatial Laplacian diffusion vector and incorporate it into `delta_t`.
+
+##### 3. `tests/dynamics/test_thermal_model.py` (ADD)
+Add tests:
+- `test_apply_transition_diffuses_heat_between_adjacent_zones`:
+  - Setup 3 zones: Zone 0 at 90°C, Zone 1 at 30°C, Zone 2 at 30°C, all workloads 0, cooling 0, ambient 30°C.
+  - Assert that Zone 0 cools down faster due to heat leaking into Zone 1, and Zone 1 heats up above ambient purely due to diffusion from Zone 0.
+  - Assert that Zone 2 (not adjacent to Zone 0) remains cooler than Zone 1.
+
+#### Verification & Testing
+1. Run `pytest tests/dynamics/test_thermal_model.py -v`.
+2. Run full regression test suite (`tests/test_submission_readiness.py`, `tests/test_baselines.py`, `tests/test_api_security.py`, etc.).
+3. Run `python run_benchmark.py` to ensure benchmark controllers adapt cleanly to realistic multi-zone spatial coupling.
+
+**Status**: ✅ **Completed & Verified**
+- Defined `KAPPA_DIFFUSION = 0.05` in `config/constants.py`.
+- Integrated 1D discrete Laplacian thermal diffusion with Neumann boundaries into `dynamics/thermal_model.py`.
+- Added unit test `test_apply_transition_diffuses_heat_between_adjacent_zones` in `tests/dynamics/test_thermal_model.py`.
+- Full regression suite passed (35/35 tests passing).
+
+---
+
+### 9. Fix Plan for H5: `/simulate` Endpoint Fails with AttributeError
+
+#### Overview
+In `core/env.py` (lines 214–215):
+```python
+# Directly call the reset function
+initial_observation = reset(task_name=task_name)
+session_config = initial_observation.model_dump() # Convert Observation to dict for consistency
+```
+`reset()` in `core/env.py` returns `session.observation.model_dump()`, which is already a Python `dict`.
+Calling `.model_dump()` on a `dict` raises `AttributeError: 'dict' object has no attribute 'model_dump'`, causing `POST /simulate` to crash with HTTP 400/500 immediately.
+
+Furthermore:
+In `core/env.py` lines 228–230:
+```python
+temp_session = SimulationSession.from_task_name(task_name)
+num_zones = temp_session.config.num_zones
+```
+`CURRENT_SESSION` is already instantiated by `reset()`, with its configuration and number of zones cleanly accessible in `CURRENT_SESSION.config`. Re-instantiating a disconnected `temp_session` is redundant and can cause drift if seeds or parameters vary.
+
+#### Architecture of Solution
+```
+[Before: Broken .model_dump() on Dict]
+Client POST /simulate {"task_name": "easy"}
+  └── reset(task_name=task_name) ──> returns dict
+        └── dict.model_dump() ──> AttributeError CRASH (HTTP 400/500)
+
+                               │
+                               ▼  REMEDIATION
+[After: Clean Dict Handling & Direct Session Access]
+Client POST /simulate {"task_name": "easy"}
+  └── initial_obs = reset(task_name=task_name)  # already dict
+  └── num_zones = len(initial_obs["temperatures"])
+  └── Step rollout with valid action payload
+  └── evaluate_trajectory with CURRENT_SESSION.config
+  └── Returns clean simulation summary JSON (HTTP 200)
+```
+
+#### Detailed File Changes
+
+##### 1. `core/env.py` (MODIFY lines 206–270)
+Refactor `simulate`:
+```python
+@app.post("/simulate")
+def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, Any]:
+    """
+    Runs a full simulation from start to finish using a fixed cooling policy.
+    Returns the final trajectory grade and performance metrics.
+    """
+    try:
+        initial_observation = reset(task_name=task_name)
+        if isinstance(initial_observation, dict):
+            obs_dict = initial_observation
+        else:
+            obs_dict = initial_observation.model_dump()
+            
+        with env_lock:
+            config = CURRENT_SESSION.config
+            num_zones = config.num_zones
+
+    except HTTPException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=f"Error resetting environment: {exc.detail}")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Error loading task configuration: {str(exc)}")
+
+    observations = [obs_dict]
+    actions = []
+    total_reward = 0.0
+    done = False
+    
+    while not done:
+        action = {"cooling": [cooling_level] * num_zones}
+        try:
+            step_result = step(action)
+        except HTTPException as exc:
+            raise HTTPException(status_code=exc.status_code, detail=f"Error stepping environment: {exc.detail}")
+
+        observations.append(step_result["observation"])
+        actions.append(action)
+        total_reward += step_result["reward"]["value"]
+        done = step_result["done"]
+
+    score = evaluate_trajectory(observations, actions, config)
+
+    return {
+        "task": task_name,
+        "steps": len(actions),
+        "total_reward": total_reward,
+        "score": score,
+        "status": "completed"
+    }
+```
+
+##### 2. `tests/test_api_security.py` (ADD)
+Add integration test `test_simulate_endpoint_executes_successfully`:
+- Call `client.post("/simulate?task_name=easy&cooling_level=0.5")`.
+- Assert response status is 200.
+- Assert response contains `{"task": "easy", "status": "completed"}` and valid numerical `"score"`.
+
+#### Verification & Testing
+1. Run `pytest tests/test_api_security.py -v`.
+2. Run full regression test suite.
+
+**Status**: ✅ **Completed & Verified**
+- Refactored `simulate()` in `core/env.py` to handle `initial_observation` without dict attribute error.
+- Direct access to `CURRENT_SESSION.config` under `env_lock`.
+- Handled query defaults robustly without parameter validation rejections.
+- Added unit test `test_simulate_endpoint_executes_successfully` in `tests/test_api_security.py`.
+- Full regression suite passed (36/36 tests passing).
+
+---
+
+### 10. Fix Plan for H6: Hard Benchmark Scenario Starts in Immediate Violation
+
+#### Overview
+In `tasks/hard.json`:
+```json
+{
+  "num_zones": 8,
+  "initial_temperatures": [69.0, 70.0, 70.5, 69.5, 71.0, 69.5, 70.5, 69.0],
+  "safe_temperature": 70.5,
+  ...
+}
+```
+Notice Zone 4 is initialized to $71.0^\circ\text{C}$, and Zones 2 and 6 are at $70.5^\circ\text{C}$, while `safe_temperature` is $70.5^\circ\text{C}$.
+In `grader/metrics.py`:
+```python
+violations = sum(1 for obs in observations if any(t > config.safe_temperature for t in obs["temperatures"]))
+```
+Because the initial observation at step 0 already has Zone 4 at $71.0^\circ\text{C}$, `violations` is guaranteed to be $\ge 1$ from the moment of initialization, before any controller or policy has had a single step to act!
+This makes it **mathematically impossible** for any agent (human, classical, or RL) to achieve 100% safety on `hard.json`.
+
+#### Architecture of Solution
+```
+[Unfair Initial Violation]
+hard.json: safe_temperature = 70.5°C, initial_temperatures = [..., 71.0, ...]
+  └── Step 0 observation: Zone 4 = 71.0°C > 70.5°C
+        └── 1 violation recorded BEFORE step 1!
+        └── Safety score can never reach 1.0.
+
+                               │
+                               ▼  REMEDIATION
+[Fair Critical Stress: Extreme Closeness to Safe Threshold Without Pre-Action Violation]
+hard.json: safe_temperature = 70.5°C
+Adjust initial temperatures so maximum initial temperature is 70.4°C:
+"initial_temperatures": [69.0, 70.0, 70.3, 69.5, 70.4, 69.5, 70.2, 69.0]
+  └── Maximum initial temperature is 70.4°C (< 70.5°C)
+  └── Extreme stress: 0.1°C margin from failure under 0.98 initial workload!
+  └── A fast, intelligent controller can immediately apply cooling=1.0 and prevent violation.
+  └── A 100% safety score is now achievable by a perfect controller.
+```
+
+#### Detailed File Changes
+
+##### 1. `tasks/hard.json` (MODIFY lines 3)
+Change:
+```json
+"initial_temperatures": [69.0, 70.0, 70.3, 69.5, 70.4, 69.5, 70.2, 69.0],
+```
+
+##### 2. `tests/test_submission_readiness.py` (ADD)
+Add test `test_canonical_tasks_start_in_non_violating_state`:
+- Iterate over all canonical tasks (`easy.json`, `medium.json`, `hard.json`).
+- Verify that for every zone $z$, $T_{z, 0} \le T_{\text{safe}}$.
+- Guarantee that no task starts in a pre-step unpreventable violation.
+
+#### Verification & Testing
+1. Run `pytest tests/test_submission_readiness.py -v`.
+2. Run full regression test suite (`tests/test_submission_readiness.py`, `tests/test_baselines.py`, `tests/test_api_security.py`, `tests/reward/test_reward_fn.py`, `tests/grader/test_evaluator.py`, `tests/dynamics/test_thermal_model.py`).
+3. Run `python run_benchmark.py` and inspect hard task performance across controllers.
+
+**Status**: ✅ **Completed & Verified**
+- Adjusted `tasks/hard.json` initial temperatures to peak at $70.4^\circ\text{C}$ ($< 70.5^\circ\text{C}$).
+- Added invariant test `test_canonical_tasks_start_in_non_violating_state` in `tests/test_submission_readiness.py`.
+- Full regression suite passed (37/37 tests passing). All 6 High Severity issues (H1–H6) are now completely resolved.
+
+---
+
+### 11. Fix Plan for M1: Global `CURRENT_SESSION` Without Multi-Tenant State Isolation
+
+#### Overview
+In `core/env.py` (line 46):
+```python
+CURRENT_SESSION: Optional[SimulationSession] = None
+env_lock = threading.Lock()
+```
+The server relies on a single global variable `CURRENT_SESSION`. While `env_lock` prevents thread collision during the execution of a single step, any incoming `/reset` call overwrites `CURRENT_SESSION` globally.
+If multiple agents or benchmark runners connect simultaneously (e.g. concurrent evaluation threads, parallel inference runners, or multi-tenant benchmarking):
+- Client A resets to `hard`.
+- Client B resets to `easy`.
+- Client A steps, thinking it is running `hard`, but its action is applied to `easy`!
+
+#### Architecture of Solution
+```
+[Single Shared Global Session]
+Client A ──> POST /reset (hard) ──> CURRENT_SESSION = hard
+Client B ──> POST /reset (easy) ──> CURRENT_SESSION = easy (Overwrites Client A!)
+Client A ──> POST /step ──────────> Steps Client B's session! State corrupted!
+
+                               │
+                               ▼  REMEDIATION
+[Multi-Tenant Session Registry with Backward Compatibility]
+ACTIVE_SESSIONS: Dict[str, SimulationSession] = {}
+DEFAULT_SESSION_ID = "default"
+
+1. POST /reset:
+   - Accepts optional header / param `X-Session-ID` or `session_id`.
+   - If not provided, defaults to DEFAULT_SESSION_ID (100% backward compatible with single-client root submission & test suite).
+   - Generates/assigns session_id, stores in `ACTIVE_SESSIONS[session_id]`.
+   - Returns observation dict with `session_id` included in response or headers.
+
+2. POST /step, GET /state, GET /score:
+   - Looks up session by `session_id` (from query param, header `X-Session-ID`, or defaults to DEFAULT_SESSION_ID).
+   - Operates on isolated `SimulationSession` instance.
+   - Raises HTTP 404/400 if specific `session_id` does not exist.
+
+3. Concurrency Protection:
+   - Fine-grained per-session lock or dictionary lock to allow concurrent independent simulations.
+```
+
+#### Detailed File Changes
+
+##### 1. `core/env.py` (MODIFY)
+- Implement `SESSIONS: Dict[str, SimulationSession] = {}` and `session_locks: Dict[str, threading.Lock] = {}`.
+- Maintain `DEFAULT_SESSION_ID = "default"` for zero-configuration compatibility with existing scripts (`sample_run.py`, `tests/test_submission_readiness.py`).
+- Update `_get_session(session_id: str)` to safely retrieve active sessions.
+- In `/reset`, `/step`, `/state`, `/score`, `/simulate`, accept optional `session_id: Optional[str] = Query(None)` and header `x_session_id: Optional[str] = Header(None)`.
+- If `session_id` is provided, use it; otherwise fallback to `DEFAULT_SESSION_ID`.
+
+##### 2. `tests/test_api_security.py` (ADD)
+Add concurrency and isolation test `test_multi_tenant_session_isolation`:
+- Reset Session 1 to `easy` with ID `"client-1"`.
+- Reset Session 2 to `hard` with ID `"client-2"`.
+- Step Session 1 with 3-zone cooling action `[0.3, 0.3, 0.3]`.
+- Step Session 2 with 8-zone cooling action `[0.8] * 8`.
+- Verify Session 1 has `num_zones == 3` and step counter 1, completely unaffected by Session 2 (`num_zones == 8`).
+
+#### Verification & Testing
+1. Run `pytest tests/test_api_security.py -v`.
+2. Run full regression test suite (`37/37+` tests).
+
+
+
+

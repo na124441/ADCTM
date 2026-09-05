@@ -1,6 +1,6 @@
 {
   "num_zones": 8,
-  "initial_temperatures": [69.0, 70.0, 70.5, 69.5, 71.0, 69.5, 70.5, 69.0],
+  "initial_temperatures": [69.0, 70.0, 70.3, 69.5, 70.4, 69.5, 70.2, 69.0],
   "initial_workloads": [0.92, 0.95, 0.94, 0.90, 0.98, 0.92, 0.96, 0.91],
   "ambient_temperature": 52.0,
   "safe_temperature": 70.5,

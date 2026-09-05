@@ -1,6 +1,6 @@
-﻿import numpy as np
+import numpy as np
 
-from config.constants import ALPHA, BETA, GAMMA
+from config.constants import ALPHA, BETA, GAMMA, MAX_PHYSICAL_TEMPERATURE, KAPPA_DIFFUSION
 from core.models import Action, Observation
 from tasks.task_config import TaskConfig
 
@@ -32,12 +32,24 @@ def apply_transition(
         if obs.time_step >= config.degradation_step:
             cooling_effect[config.degraded_zone] = BETA * 0.5
 
-    delta_t = ALPHA * workloads - cooling_effect * cooling + GAMMA * (ambient_temp - temperatures)
+    # Discrete 1D Laplacian thermal diffusion between adjacent rack zones (Neumann boundary conditions)
+    diffusion = np.zeros_like(temperatures)
+    if len(temperatures) > 1:
+        diffusion[0] = temperatures[1] - temperatures[0]
+        diffusion[-1] = temperatures[-2] - temperatures[-1]
+        if len(temperatures) > 2:
+            diffusion[1:-1] = temperatures[:-2] + temperatures[2:] - 2.0 * temperatures[1:-1]
+        diffusion = KAPPA_DIFFUSION * diffusion
+
+    delta_t = (
+        ALPHA * workloads 
+        - cooling_effect * cooling 
+        + GAMMA * (ambient_temp - temperatures)
+        + diffusion
+    )
     
-    # Use a small epsilon for numerical stability and ensure we don't dip below ambient
-    EPSILON = 1e-4
-    next_temperatures = np.maximum(temperatures + delta_t, ambient_temp - EPSILON)
-    next_temperatures = np.maximum(next_temperatures, ambient_temp)
+    # Floor at ambient temperature and clamp at physical silicon thermal ceiling
+    next_temperatures = np.clip(temperatures + delta_t, ambient_temp, MAX_PHYSICAL_TEMPERATURE)
 
     return Observation(
         temperatures=next_temperatures.tolist(),

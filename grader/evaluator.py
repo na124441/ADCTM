@@ -1,4 +1,4 @@
-﻿# grader/evaluator.py
+import math
 from typing import List, Dict
 from tasks.task_config import TaskConfig
 from .metrics import compute_metrics
@@ -18,10 +18,17 @@ def evaluate_trajectory(
     """
     safety, energy, jitter, target_error = compute_metrics(observations, actions, config)
 
-    # Normalize components to [0,1]
-    energy_score = 1.0 - energy
-    jitter_score = 1.0 - jitter
+    # Normalize raw components to [0,1]
+    raw_energy_score = 1.0 - energy
+    raw_jitter_score = 1.0 - jitter
     target_score = max(0.0, min(1.0, 1.0 - target_error))
+
+    # Safety gating: In mission-critical data center infrastructure, energy efficiency
+    # and control smoothness only create value if the thermal health is maintained safely.
+    # Allowing silicon to burn while cooling=0.0 is not efficiency; it is catastrophic failure.
+    safety_factor = math.sqrt(max(0.0, float(safety)))
+    energy_score = raw_energy_score * safety_factor
+    jitter_score = raw_jitter_score * safety_factor
 
     # Weighted sum
     w_safety = 0.4

@@ -170,3 +170,14 @@ def test_zero_policy_is_weak_on_active_tasks(task_name: str, threshold: float):
 
     score = evaluate_trajectory(observations, actions, session.config)
     assert score < threshold
+
+
+def test_canonical_tasks_start_in_non_violating_state():
+    # Invariant: No benchmark task may start at step 0 with an unpreventable violation
+    for tier in ["easy", "medium", "hard"]:
+        session = SimulationSession.from_task_name(tier)
+        for z, temp in enumerate(session.observation.temperatures):
+            assert temp <= session.config.safe_temperature, (
+                f"Task {tier} zone {z} starts at {temp}°C > safe limit {session.config.safe_temperature}°C!"
+            )
+

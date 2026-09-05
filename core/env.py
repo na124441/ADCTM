@@ -120,7 +120,8 @@ def reset(
     try:
         # Resolve task_name and seed with strict ResetPayload validation
         parsed_payload = {}
-        if payload is not None:
+        # In FastAPI direct python invocation or HTTP without body, payload might be None or a Body marker
+        if payload is not None and not hasattr(payload, "default"):
             if not isinstance(payload, dict):
                 raise HTTPException(status_code=422, detail="Reset payload must be a JSON object.")
             # Validate through ResetPayload (enforces extra='forbid' to block parameter injection)
@@ -129,8 +130,8 @@ def reset(
             parsed_payload["seed"] = validated.seed
 
         # Query parameters take priority if provided
-        final_task = task_name if task_name is not None else parsed_payload.get("task_name", "easy")
-        final_seed = seed if seed is not None else parsed_payload.get("seed", None)
+        final_task = task_name if (task_name is not None and not hasattr(task_name, "default")) else parsed_payload.get("task_name", "easy")
+        final_seed = seed if (seed is not None and not hasattr(seed, "default")) else parsed_payload.get("seed", None)
 
         # Validate task through ResetPayload to guarantee canonical name
         validated_task = ResetPayload(task_name=final_task, seed=final_seed)
@@ -210,55 +211,36 @@ def simulate(task_name: str = "easy", cooling_level: float = 0.4) -> Dict[str, A
     Returns the final trajectory grade and performance metrics.
     """
     try:
-        # Directly call the reset function
-        initial_observation = reset(task_name=task_name)
-        session_config = initial_observation.model_dump() # Convert Observation to dict for consistency
+        initial_observation = reset(payload=None, task_name=task_name)
+        obs_dict = initial_observation if isinstance(initial_observation, dict) else initial_observation.model_dump()
         
-        # We need the num_zones from the session config to create actions.
-        # Since /reset returns an Observation, we need to infer num_zones from it.
-        # Or, ideally, we would have a way to get the config directly.
-        # For now, let's assume we can get it from the initial observation.
-        # This is a bit of a hack, but necessary if /reset only returns Observation.
-        # A better approach would be to fetch the config from /state after reset,
-        # but that would require another API call.
-        # Let's re-instantiate a dummy session to get the config for num_zones.
-        # This is not ideal, but it avoids making another API call to /state.
-        # A more robust solution would be to modify the /reset endpoint to return
-        # more comprehensive session details or have a /config endpoint.
-        temp_session = SimulationSession.from_task_name(task_name)
-        num_zones = temp_session.config.num_zones
+        with env_lock:
+            config = CURRENT_SESSION.config
+            num_zones = config.num_zones
 
     except HTTPException as exc:
-        raise HTTPException(status_code=400, detail=f"Error resetting environment: {exc.detail}")
+        raise HTTPException(status_code=exc.status_code, detail=f"Error resetting environment: {exc.detail}")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error loading task configuration: {str(exc)}")
 
-    observations = [session_config] # Initial observation from reset
+    observations = [obs_dict]
     actions = []
     total_reward = 0.0
     done = False
     
-    # Loop until the simulation is done
     while not done:
-        # Simple policy: apply fixed cooling level to all zones
         action = {"cooling": [cooling_level] * num_zones}
-        
         try:
-            # Directly call the step function
             step_result = step(action)
         except HTTPException as exc:
-            raise HTTPException(status_code=400, detail=f"Error stepping environment: {exc.detail}")
+            raise HTTPException(status_code=exc.status_code, detail=f"Error stepping environment: {exc.detail}")
 
         observations.append(step_result["observation"])
         actions.append(action)
         total_reward += step_result["reward"]["value"]
         done = step_result["done"]
 
-    # Compute final grade
-    # Note: evaluate_trajectory expects a TaskConfig object, but we only have the initial observation.
-    # We need to pass the actual config to evaluate_trajectory.
-    # Since we instantiated a temp_session above, we can use its config.
-    score = evaluate_trajectory(observations, actions, temp_session.config)
+    score = evaluate_trajectory(observations, actions, config)
 
     return {
         "task": task_name,
