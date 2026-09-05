@@ -1192,6 +1192,172 @@ Add curvature sensitivity test verifying that an accelerating trajectory yields 
 1. Run `pytest tests/analysis/test_trend_predictor.py -v`.
 2. Run full regression test suite.
 
+**Status**: ✅ **Completed & Verified**
+- Refactored `predict_thermal_future` in `analysis/trend_predictor.py` to use closed-form Ordinary Least Squares (OLS) linear regression.
+- Added curvature and acceleration sensitivity unit test in `tests/analysis/test_trend_predictor.py`.
+- Full regression suite passed (43/43 tests passing).
+
+---
+
+### 16. Fix Plan for M6: Brittle LLM Output Parsing and Silent Failure Masking
+
+#### Overview
+In `inference.py` (lines 29–42) and `sample_run.py`:
+```python
+def parse_action(content: str, num_zones: int) -> List[float]:
+    try:
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError
+        data = json.loads(content[start:end])
+        cooling = data.get("cooling", [])
+        if len(cooling) != num_zones:
+            raise ValueError
+        return [max(0.0, min(1.0, float(v))) for v in cooling]
+    except Exception:
+        return [0.3] * num_zones
+```
+1. **Silent Fallback Masking**:
+   If the LLM returns invalid markdown, text explanations before/after the JSON, incorrect zone counts, or malformed JSON, the parser catches `Exception` and silently outputs `[0.3] * num_zones`. No warning, log, or telemetry is emitted to stderr or the step logger indicating that the LLM failed to comply with the schema.
+2. **Brittle Regex / String Parsing**:
+   Simply finding the first `{` and last `}` breaks if the model includes nested JSON examples or braces in its commentary.
+3. **Duplicated Parser Code**:
+   `inference/parser.py` has `parse_llm_response(response_text, expected_num_zones) -> Action`, but `inference.py` re-implements its own ad-hoc `parse_action` with silent swallow.
+
+#### Architecture of Solution
+```
+[Silent Failure Masking]
+LLM outputs malformed text ──> parse_action swallows Exception ──> returns [0.3, ...]
+  └── Nobody knows the LLM failed! Evaluation measures 0.3 fallback instead of model!
+
+                               │
+                               ▼  REMEDIATION
+[Robust Schema Extraction with Structured Diagnostic Logging]
+1. Multi-Pattern Robust Parser in `inference/parser.py`:
+   - Strips Markdown fences (```json ... ```).
+   - Regex-extracts JSON objects containing `"cooling"`.
+   - Validates length against `expected_num_zones`.
+   - Emits structured warnings to logger / stderr on parse failure, detailing raw reply snippet.
+2. Graceful Fallback with Alert Signal:
+   - When parse fails, record `error="LLM JSON schema parse failure: <reason>"` in step telemetry.
+   - Fall back to physics-aware proportional control or safe default with explicit audit log.
+```
+
+#### Detailed File Changes
+
+##### 1. `inference/parser.py` (MODIFY)
+Enhance `parse_llm_response`:
+- Strip markdown fences (````json ... ````).
+- Use regex to locate `"cooling":\s*\[[^\]]+\]`.
+- If parsing fails, raise informative `ValueError` with snippet.
+- Add helper `parse_action_safe(raw_content: str, num_zones: int, fallback_policy: Optional[Callable] = None) -> Tuple[List[float], Optional[str]]` returning both the action and the failure diagnostic message.
+
+##### 2. `inference.py` (MODIFY lines 29–42 & rollout loop)
+- Import `parse_action_safe` from `inference.parser`.
+- Capture parse warnings and log them in `log_step(..., error=error_msg)`.
+
+##### 3. `tests/test_submission_readiness.py` (ADD)
+Add tests:
+- `test_llm_parser_handles_markdown_blocks_and_logs_errors`:
+  - Parse markdown code blocks with commentary.
+  - Parse truncated/malformed response and verify structured error is reported.
+
+#### Verification & Testing
+1. Run `pytest tests/test_submission_readiness.py -v`.
+2. Run full regression test suite (`44/44` tests).
+
+**Status**: ✅ **Completed & Verified**
+- Enhanced `parse_llm_response` in `inference/parser.py` with markdown code fence removal, outer JSON boundaries, and regex array fallback.
+- Implemented `parse_action_safe` returning `(action, error_msg)` and wired it into `inference.py` rollout loop to log diagnostic errors.
+- Added unit test `test_llm_parser_handles_markdown_blocks_and_logs_errors` in `tests/test_submission_readiness.py`.
+- Full regression suite passed (44/44 tests passing).
+
+---
+
+### 17. Fix Plan for M7: Suboptimal Docker Image Hygiene
+
+#### Overview
+1. Missing `.dockerignore` meant temporary test cache files (`.pytest_cache`), local `.env`, and git history (`.git`) could be copied into container builds.
+2. `Dockerfile` lacked a `HEALTHCHECK` instruction, preventing container orchestrators (Docker Compose, Kubernetes, Hugging Face Spaces) from monitoring server health.
+3. Clean package management practices require removing apt lists after installing runtime utilities (`curl`).
+
+#### Architecture of Solution
+```
+[Unmonitored, Unsanitized Container Image]
+No .dockerignore ──> .git, secrets, tests baked into image layer
+No HEALTHCHECK   ──> Orchestrator blind to server hangs / memory faults
+
+                               │
+                               ▼  REMEDIATION
+[Hardened Production Container]
+1. .dockerignore: Explicitly ignore .git, .env*, .pytest_cache, .venv, *.log, models/*.zip
+2. Dockerfile: Install curl, clean /var/lib/apt/lists/*
+3. HEALTHCHECK:
+   HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+       CMD curl -f http://localhost:7860/ || exit 1
+```
+
+#### Detailed File Changes
+
+##### 1. `.dockerignore` (VERIFY & CONFIGURE)
+Ensure patterns cover all sensitive, development, and cache artifacts:
+```
+.git
+.gitignore
+.env
+.env.*
+.envrc
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+models/*.zip
+*.log
+benchmark_results.json
+Audit_*.md
+```
+
+##### 2. `Dockerfile` (MODIFY)
+Add curl installation with cache cleanup and `HEALTHCHECK` directive:
+```dockerfile
+# Install curl for health checking and cleanup apt cache
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+...
+
+# Container healthcheck testing the root endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:7860/ || exit 1
+```
+
+##### 3. `tests/test_submission_readiness.py` (MODIFY)
+Update `test_dockerfile_matches_server_entrypoint` to verify that `HEALTHCHECK` is present.
+
+#### Verification & Testing
+1. Run `python -m pytest tests/test_submission_readiness.py -v`.
+2. Verify all 44 test cases pass.
+
+**Status**: ✅ **Completed & Verified**
+- Configured `.dockerignore` to filter out git, cache, virtualenvs, logs, and sensitive files.
+- Added `HEALTHCHECK` instruction using curl probe to `Dockerfile` with minimal footprint (`rm -rf /var/lib/apt/lists/*`).
+- Updated and verified `test_dockerfile_matches_server_entrypoint`.
+- Full regression suite passed (44/44 tests passing).
+
+---
+
+## Final Project Verification Summary
+
+- **Total Problems Identified**: 17 (4 Critical, 6 High, 7 Medium)
+- **Total Problems Resolved & Verified**: 17 (100%)
+- **Test Suite**: 44 passing unit/integration tests across 7 test modules.
+- **Empirical Multi-Seed Baseline Performance**: Verified across Zero, Rule-Based, PID, LLM, and PPO agents over Easy, Medium, and Hard tiers.
+- **Production Status**: **Ready for OpenEnv submission, deployment, and adversarial evaluation.**
+
+
+
 
 
 

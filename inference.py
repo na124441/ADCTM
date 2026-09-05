@@ -26,19 +26,13 @@ ENV_URL = "http://localhost:7860"
 TEMPERATURE = 0.0
 
 
+from inference.parser import parse_action_safe, parse_llm_response
+
+
 def parse_action(content: str, num_zones: int) -> List[float]:
-    try:
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start == -1 or end == 0:
-            raise ValueError
-        data = json.loads(content[start:end])
-        cooling = data.get("cooling", [])
-        if len(cooling) != num_zones:
-            raise ValueError
-        return [max(0.0, min(1.0, float(v))) for v in cooling]
-    except Exception:
-        return [0.3] * num_zones
+    action_vals, _ = parse_action_safe(content, num_zones)
+    return action_vals
+
 
 
 def call_llm(prompt: str) -> str:
@@ -129,11 +123,18 @@ def run_task(task_name: str) -> float:
             try:
                 prompt = detailed_build_prompt(current_observation, config.model_dump())
                 raw = call_llm(prompt)
-                action_vals = parse_action(raw, len(current_observation.temperatures)) if raw else [0.3]*len(current_observation.temperatures)
+                if raw:
+                    action_vals, parse_err = parse_action_safe(raw, len(current_observation.temperatures))
+                    if parse_err:
+                        error_msg = parse_err
+                else:
+                    action_vals = [0.3] * len(current_observation.temperatures)
+                    error_msg = "Empty response from LLM"
             except Exception as e:
                 # Provide a better error message if it's an API error
                 error_msg = type(e).__name__ + ": " + str(e).replace('\n', ' ')
-                action_vals = [0.3]*len(current_observation.temperatures)
+                action_vals = [0.3] * len(current_observation.temperatures)
+
 
             all_actions.append({"cooling": action_vals})
 

@@ -280,11 +280,12 @@ Empirical benchmark evaluation conducted across multiple random seeds over all 3
 
 | Approach | Overall Score | Safety (40%) | Precision (30%) | Efficiency (20%) | Smoothness (10%) | Characteristics |
 |---|:---:|:---:|:---:|:---:|:---:|---|
-| 🧊 **Zero (Passive)** | 0.19 | 0.04 | 0.43 | 0.16 | 0.16 | Passive baseline; severe overheating, efficiency correctly penalized |
-| 🧠 **RL (PPO)** | 0.58 | 0.67 | 0.68 | 0.21 | 0.65 | Continuous PPO policy; strong in Easy/Medium, struggles with Hard fault |
-| 💬 **LLM Agent** | 0.73 | 0.73 | 0.86 | 0.46 | 0.82 | Proportional in-context policy; stable nominal tracking |
-| 📏 **Rule-Based** | 0.78 | 0.84 | 0.92 | 0.42 | 0.88 | Multi-tier threshold controller with emergency safety overrides |
-| 🔁 **PID Controller** | **0.81** | **0.88** | **0.96** | 0.37 | 0.88 | Decoupled per-zone PID with anti-windup clamping & proactive safety |
+| 🧊 **Zero (Passive)** | 0.20 | 0.05 | 0.44 | 0.17 | 0.17 | Passive baseline; severe overheating, efficiency correctly penalized |
+| 🧠 **RL (PPO)** | 0.58 | 0.67 | 0.69 | 0.22 | 0.65 | Continuous PPO policy; strong in Easy/Medium, struggles with Hard fault |
+| 💬 **LLM Agent** | 0.78 | 0.85 | 0.86 | 0.49 | 0.89 | Proportional in-context policy; stable nominal tracking |
+| 📏 **Rule-Based** | 0.83 | 0.93 | 0.92 | 0.45 | 0.93 | Multi-tier threshold controller with emergency safety overrides |
+| 🔁 **PID Controller** | **0.86** | **1.00** | **0.97** | 0.39 | **0.94** | Decoupled per-zone PID with anti-windup clamping & proactive safety |
+
 
 ### 🔬 Reproducing the Benchmark
 

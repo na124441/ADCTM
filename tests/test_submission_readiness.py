@@ -154,9 +154,11 @@ def test_dockerfile_matches_server_entrypoint():
         "COPY . .",
         "EXPOSE 7860",
         "ENV PORT=7860",
+        "HEALTHCHECK",
         'CMD ["python", "app.py"]',
     ]:
         assert snippet in content
+
 
 
 @pytest.mark.parametrize(
@@ -186,4 +188,39 @@ def test_canonical_tasks_start_in_non_violating_state():
             assert temp <= session.config.safe_temperature, (
                 f"Task {tier} zone {z} starts at {temp}°C > safe limit {session.config.safe_temperature}°C!"
             )
+
+
+def test_llm_parser_handles_markdown_blocks_and_logs_errors():
+    from inference.parser import parse_action_safe, parse_llm_response
+
+    # Test 1: Markdown code fences with commentary
+    markdown_reply = """Here is the recommended cooling plan:
+```json
+{
+    "cooling": [0.45, 0.60, 0.35]
+}
+```
+Let me know if you need further adjustments."""
+    action = parse_llm_response(markdown_reply, expected_num_zones=3)
+    assert action.cooling == [0.45, 0.60, 0.35]
+
+    # Test 2: parse_action_safe returns cooling and None error on valid response
+    act, err = parse_action_safe(markdown_reply, num_zones=3)
+    assert act == [0.45, 0.60, 0.35]
+    assert err is None
+
+    # Test 3: Malformed / non-compliant text triggers diagnostic error and safe fallback
+    malformed_reply = "I think you should increase cooling in zone 1 to maximum."
+    act_fallback, err_msg = parse_action_safe(malformed_reply, num_zones=3)
+    assert act_fallback == [0.3, 0.3, 0.3]
+    assert err_msg is not None
+    assert "LLM parse failure" in err_msg
+
+    # Test 4: Mismatched zone count reports informative diagnostic
+    bad_zone_reply = '{"cooling": [0.5, 0.5]}'
+    act_bad_zone, err_bad_zone = parse_action_safe(bad_zone_reply, num_zones=3)
+    assert act_bad_zone == [0.3, 0.3, 0.3]
+    assert err_bad_zone is not None
+    assert "Expected 'cooling' to contain 3 entries" in err_bad_zone
+
 

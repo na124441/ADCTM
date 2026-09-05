@@ -14,17 +14,18 @@ This document serves as the master register of all material engineering, ML/RL, 
 | **C4** | ✅ RESOLVED | Evaluation | `core/simulator.py`, `core/env.py` | /score rejects zero-step sessions with HTTP 400; get_score returns 0.0 fallback |
 | **H1** | ✅ RESOLVED | RL / Reward | `reward/reward_fn.py` | Jitter penalty exemption vectorized per-zone; prevents sacrificial zone reward hacking |
 | **H2** | ✅ RESOLVED | Evaluation | `grader/evaluator.py` | Safety-gated efficiency & smoothness; zero-cooling penalty properly enforced |
-| **H3** | 🟠 HIGH | Physics | `dynamics/thermal_model.py` | No physical upper temperature bound (temperatures can rise infinitely past destruction) |
-| **H4** | 🟠 HIGH | Physics | `dynamics/thermal_model.py` | No inter-zone thermal diffusion/coupling (effective N isolated 1-zone problems) |
-| **H5** | 🟠 HIGH | Server / API | `core/env.py` | `/simulate` endpoint crashes (`AttributeError: 'dict' object has no attribute 'model_dump'`) |
-| **H6** | 🟠 HIGH | Benchmark | `tasks/hard.json` | Hard task starts already in thermal safety violation at step 0 |
-| **M1** | 🟡 MEDIUM | Systems | `core/env.py` | Global `CURRENT_SESSION` allows no multi-client or multi-agent state isolation |
-| **M2** | 🟡 MEDIUM | MDP Formulation | `core/models.py` | Observation lacks goal info (`target_temperature`, `safe_temperature`) needed for Markov control |
-| **M3** | 🟡 MEDIUM | Evaluation | Benchmark scripts | Single fixed seed evaluation per task with zero variance or confidence intervals reported |
-| **M4** | 🟡 MEDIUM | Dependencies | `pyproject.toml`, `requirements.txt` | Mismatched dependency specs (`openenv` vs `openenv-core`) and unpinned versions |
-| **M5** | 🟡 MEDIUM | Analysis | `analysis/trend_predictor.py` | Velocity calculation cancels intermediate values; purely linear endpoint extrapolation |
-| **M6** | 🟡 MEDIUM | Inference | `inference/parser.py`, `inference.py` | Brittle JSON string parsing via substring find; silent fallback to 0.3 masking errors |
-| **M7** | 🟡 MEDIUM | Docker / Infra | `Dockerfile` | Missing `.dockerignore`, missing container health check, unnecessary tools in final image |
+| **H3** | ✅ RESOLVED | Physics | `dynamics/thermal_model.py` | Physical 105°C silicon junction failure bound enforced via np.clip |
+| **H4** | ✅ RESOLVED | Physics | `dynamics/thermal_model.py` | 1D discrete Laplacian spatial thermal diffusion with Neumann boundaries |
+| **H5** | ✅ RESOLVED | Server / API | `core/env.py` | /simulate endpoint dict handling and direct session access fixed |
+| **H6** | ✅ RESOLVED | Benchmark | `tasks/hard.json` | Hard task initial temperatures adjusted to start within safe headroom (<70.5°C) |
+| **M1** | ✅ RESOLVED | Systems | `core/env.py` | Multi-tenant session isolation with fine-grained per-session threading locks |
+| **M2** | ✅ RESOLVED | MDP Formulation | `core/models.py` | Goal parameters (target_temp, safe_temp) included in Observation model |
+| **M3** | ✅ RESOLVED | Evaluation | Benchmark scripts | Statistical multi-seed evaluation with CLI flags (--seeds, --num-seeds) |
+| **M4** | ✅ RESOLVED | Dependencies | `pyproject.toml`, `requirements.txt` | Harmonized openenv-core, added [project.optional-dependencies] test |
+| **M5** | ✅ RESOLVED | Analysis | `analysis/trend_predictor.py` | Closed-form OLS rolling linear regression sensitive to trajectory curvature |
+| **M6** | ✅ RESOLVED | Inference | `inference/parser.py`, `inference.py` | Robust markdown fence stripping, regex extraction, diagnostic error logging |
+| **M7** | ✅ RESOLVED | Docker / Infra | `Dockerfile`, `.dockerignore` | HEALTHCHECK curl probe added, .dockerignore configured, apt cache cleaned |
+
 
 ---
 
@@ -32,9 +33,10 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ### 🔴 CRITICAL FINDINGS
 
-#### Problem ID: C1 — Phantom Baselines Claimed in README
+#### Problem ID: C1 — Phantom Baselines Claimed in README ✅ RESOLVED
 - **Severity**: 🔴 CRITICAL
 - **Subsystem**: `README.md` (Lines 277–294), `baselines/`
+- **Status**: ✅ RESOLVED — Built Gymnasium environment (`core/gym_env.py`), trained PPO RL models for all three difficulty tiers (`models/ppo_{easy,medium,hard}.zip`), implemented classical controllers (`baselines/classical.py`), RL inference agent (`baselines/rl_agent.py`), full multi-seed benchmark runner (`run_benchmark.py`), and baseline unit tests (`tests/test_baselines.py`).
 - **Problem**: The README claims 4 benchmarked baseline approaches with precise performance figures:
   - Rule-Based: `0.45`
   - PID: `0.62`
@@ -46,18 +48,20 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: C2 — Active HuggingFace API Secret Committed to Git
+#### Problem ID: C2 — Active HuggingFace API Secret Committed to Git ✅ RESOLVED
 - **Severity**: 🔴 CRITICAL
 - **Subsystem**: `.env` (Line 3), `.gitignore`
+- **Status**: ✅ RESOLVED — Removed live token from `.env`, untracked `.env` from git tracking, created `.env.example` template, and ensured comprehensive git and docker ignore patterns.
 - **Problem**: `.env` contains a live secret: `HF_TOKEN=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`. This file is tracked in version control and pushed to the public repository.
 - **Why it matters**: Severe security liability. Public secret leakage demonstrates lack of production-grade credential hygiene.
 - **Concrete Failure Scenario**: Automated token sniffers scrape the repository and abuse the token, or an interviewer inspects `.env` and flags a fundamental security violation.
 
 ---
 
-#### Problem ID: C3 — `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming
+#### Problem ID: C3 — `/reset` Accepts Arbitrary TaskConfig Permitting Evaluation Gaming ✅ RESOLVED
 - **Severity**: 🔴 CRITICAL
 - **Subsystem**: `core/env.py` (Lines 128–132), `core/simulator.py` (Lines 57–61)
+- **Status**: ✅ RESOLVED — Defined strict Pydantic model `ResetPayload(task_name=..., seed=..., extra="forbid")` whitelist. Rejected non-canonical task names and custom arbitrary dictionaries with HTTP 400. Verified via `test_reset_rejects_injected_configuration` and `test_reset_rejects_arbitrary_task_names` in `tests/test_api_security.py`.
 - **Problem**: The `/reset` endpoint accepts arbitrary dictionary payloads. When passed a custom payload without `task_name`, it executes `SimulationSession.from_dict(config_payload)` directly.
 - **Why it matters**: An agent or user can inject a trivial config (e.g. `safe_temperature=9999`, `max_steps=1`) over the network, step once, and retrieve a score of 1.0 from `/score`. The evaluation boundary has zero integrity.
 - **Concrete Failure Scenario**: 
@@ -70,9 +74,10 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: C4 — `get_score()` Returns Perfect 1.0 Score on Zero Steps
+#### Problem ID: C4 — `get_score()` Returns Perfect 1.0 Score on Zero Steps ✅ RESOLVED
 - **Severity**: 🔴 CRITICAL
 - **Subsystem**: `core/simulator.py` (Lines 129–134)
+- **Status**: ✅ RESOLVED — Modified `SimulationSession.get_score()` to return `0.0` score when `len(history_actions) == 0`. Added guard in `GET /score` endpoint returning HTTP 400 if queried on a 0-step session. Verified via `test_score_rejects_zero_step_evaluation` in `tests/test_api_security.py`.
 - **Problem**: In `SimulationSession.get_score()`:
   ```python
   if len(self.history_actions) == 0:
@@ -89,9 +94,10 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ### 🟠 HIGH SEVERITY FINDINGS
 
-#### Problem ID: H1 — Global Jitter Penalty Bypass Exploit
+#### Problem ID: H1 — Global Jitter Penalty Bypass Exploit ✅ RESOLVED
 - **Severity**: 🟠 HIGH
 - **Subsystem**: `reward/reward_fn.py` (Lines 37–38)
+- **Status**: ✅ RESOLVED — Vectorized jitter exemption per-zone (`danger_mask = temps >= danger_threshold; zone_jitters = np.where(danger_mask, 0.0, zone_jitters)`). Confirmed via `test_compute_reward_jitter_bypass_is_per_zone` in `tests/reward/test_reward_fn.py`.
 - **Problem**: 
   ```python
   if np.max(temps) >= config.safe_temperature - config.jitter_bypass_threshold:
@@ -102,9 +108,10 @@ This document serves as the master register of all material engineering, ML/RL, 
 
 ---
 
-#### Problem ID: H2 — Evaluation Metric Heavily Rewards Total Inaction
+#### Problem ID: H2 — Evaluation Metric Heavily Rewards Total Inaction ✅ RESOLVED
 - **Severity**: 🟠 HIGH
 - **Subsystem**: `grader/evaluator.py` (Lines 22–23), `grader/metrics.py` (Line 40)
+- **Status**: ✅ RESOLVED — Refactored `evaluate_trajectory` in `grader/evaluator.py` so efficiency and jitter scores are strictly safety-gated: `(1.0 - metric) * sqrt(max(0.0, safety))`. Inaction causing overheating yields a failing grade. Verified via `test_zero_cooling_does_not_get_unearned_efficiency_bonus` in `tests/grader/test_evaluator.py` and `test_zero_policy_is_weak_on_active_tasks` in `tests/test_submission_readiness.py`.
 - **Problem**: 
   ```python
   energy_score = 1.0 - energy  # where energy is mean cooling in [0, 1]
@@ -216,14 +223,18 @@ This document serves as the master register of all material engineering, ML/RL, 
 ---
 
 
-#### Problem ID: M6 — Brittle LLM Output Parsing and Silent Failure Masking
+#### Problem ID: M6 — Brittle LLM Output Parsing and Silent Failure Masking ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
 - **Subsystem**: `inference/parser.py`, `inference.py` (Lines 29–42)
+- **Status**: ✅ RESOLVED — Upgraded `parse_llm_response` in `inference/parser.py` with markdown code fence extraction (` ```json `), outermost JSON boundary isolation, and regex fallback for `"cooling": [...]`. Implemented `parse_action_safe` returning both action and diagnostic error messages. Integrated into `inference.py` to record parser diagnostics in step logs instead of silently masking compliance failures. Added unit test `test_llm_parser_handles_markdown_blocks_and_logs_errors` in `tests/test_submission_readiness.py`.
 - **Problem**: Uses string `.find("{")` and `.rfind("}")`. If JSON decoding fails, it silently defaults to a fixed action of `[0.3] * num_zones` without logging or alerting, obscuring systematic model prompt compliance failures.
+
 
 ---
 
-#### Problem ID: M7 — Suboptimal Docker Image Hygiene
+#### Problem ID: M7 — Suboptimal Docker Image Hygiene ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
-- **Subsystem**: `Dockerfile`
+- **Subsystem**: `Dockerfile`, `.dockerignore`
+- **Status**: ✅ RESOLVED — Configured `.dockerignore` to cleanly ignore `.git`, `.pytest_cache`, `.venv`, `.env`, and intermediate build artifacts. Added `HEALTHCHECK` directive in `Dockerfile` verifying `GET /` on port 7860 via curl (`HEALTHCHECK --interval=30s --timeout=10s CMD curl -f http://localhost:7860/ || exit 1`). Cleaned apt lists to minimize container image footprint. Verified via `test_dockerfile_matches_server_entrypoint` in `tests/test_submission_readiness.py`.
 - **Problem**: Missing `.dockerignore` means `.git/`, `.pytest_cache/`, and virtualenv directories are baked into images. No `HEALTHCHECK` directive exists, and build tools (`build-essential`) remain in the final slim image layer.
+
