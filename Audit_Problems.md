@@ -206,12 +206,15 @@ This document serves as the master register of all material engineering, ML/RL, 
 ---
 
 
-#### Problem ID: M5 — Oversimplified Flawed Trend Prediction Mathematics
+#### Problem ID: M5 — Oversimplified Flawed Trend Prediction Mathematics ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
 - **Subsystem**: `analysis/trend_predictor.py` (Lines 14–20)
+- **Status**: ✅ RESOLVED — Replaced telescoping delta summation with closed-form Ordinary Least Squares (OLS) linear regression across the rolling window. Evaluates true trajectory slope while accounting for intermediate curvature and acceleration. Verified via unit test `test_predict_thermal_future_curvature_sensitivity` in `tests/analysis/test_trend_predictor.py`.
 - **Problem**: In `predict_thermal_future`, summing adjacent differences algebraically cancels all intermediate points, reducing velocity to simply (T_last - T_first) / k. The predictor is blind to intermediate trajectory curvature.
+- **Why it matters**: A straight-chord extrapolation fails to detect rapid exponential runaway or decelerating plateaus, giving false safety senses or premature alarms.
 
 ---
+
 
 #### Problem ID: M6 — Brittle LLM Output Parsing and Silent Failure Masking
 - **Severity**: 🟡 MEDIUM
