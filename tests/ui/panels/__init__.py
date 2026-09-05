@@ -1,1 +1,1 @@
-﻿# ADCTMS UI Panels Tests Package
+# ADCTMS UI Panels Tests Package

@@ -1,4 +1,4 @@
-﻿from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient
 
 import server.app as server_app
 
@@ -16,14 +16,15 @@ def test_server_step_requires_reset():
     assert response.status_code == 400
 
 
-def test_server_reset_and_state(base_task_dict):
+def test_server_reset_and_state():
     client = TestClient(server_app.app)
-    response = client.post("/reset", json=base_task_dict)
+    response = client.post("/reset", json={"task_name": "easy"})
     assert response.status_code == 200
     assert response.json()["time_step"] == 0
     state_response = client.get("/state")
     assert state_response.status_code == 200
     assert state_response.json()["step_counter"] == 0
+
 
 
 def test_server_rejects_invalid_reset_payload():

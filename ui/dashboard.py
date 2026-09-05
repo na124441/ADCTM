@@ -1,4 +1,4 @@
-﻿from rich.layout import Layout
+from rich.layout import Layout
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table

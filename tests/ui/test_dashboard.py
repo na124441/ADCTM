@@ -1,4 +1,4 @@
-﻿from rich.layout import Layout
+from rich.layout import Layout
 
 from ui.dashboard import make_dashboard
 

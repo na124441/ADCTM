@@ -1,1 +1,1 @@
-﻿# ADCTMS Grader Tests Package
+# ADCTMS Grader Tests Package

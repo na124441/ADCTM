@@ -1,1 +1,1 @@
-﻿# ADCTMS Tests Root Package
+# ADCTMS Tests Root Package

@@ -1,4 +1,4 @@
-﻿# grader/metrics.py
+# grader/metrics.py
 import numpy as np
 from typing import List, Dict
 from tasks.task_config import TaskConfig

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Data structures for managing complex UI state representation.
 Provides a comprehensive dataclass container bridging physics outputs
 and Rich Terminal visualization tools. 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Path resolution centralized definitions module.
 Anchors relative internal directory resolutions dynamically handling standard OS directory abstractions.
 """

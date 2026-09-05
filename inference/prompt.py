@@ -1,4 +1,4 @@
-﻿# inference/prompt.py
+# inference/prompt.py
 
 PROMPT_TEMPLATE = """You are controlling the cooling system of a multi-zone data-center.
 

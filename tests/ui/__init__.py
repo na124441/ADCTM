@@ -1,1 +1,1 @@
-﻿# ADCTMS UI Tests Package
+# ADCTMS UI Tests Package

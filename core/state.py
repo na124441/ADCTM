@@ -1,4 +1,4 @@
-﻿"""
+"""
 Simplified state abstractions resolving internal variable representations locally.
 """
 from pydantic import BaseModel

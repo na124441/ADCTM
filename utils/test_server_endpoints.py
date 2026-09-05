@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Test all ADCTM server endpoints and display results in a Rich table.
 
 Usage:

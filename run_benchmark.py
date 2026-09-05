@@ -1,4 +1,4 @@
-﻿"""
+"""
 Comprehensive Multi-Seed Benchmark Evaluator for ADCTM.
 Evaluates:
   1. Zero Policy (lower anchor)

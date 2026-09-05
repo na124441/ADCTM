@@ -1,4 +1,4 @@
-﻿from rich import box
+from rich import box
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text

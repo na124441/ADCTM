@@ -1,1 +1,1 @@
-﻿# ADCTMS Core Tests Package
+# ADCTMS Core Tests Package

@@ -1,1 +1,1 @@
-﻿# ADCTMS UI Panels Package
+# ADCTMS UI Panels Package

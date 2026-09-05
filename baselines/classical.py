@@ -1,4 +1,4 @@
-﻿"""
+"""
 Classical Baseline Controllers for ADCTM.
 Includes:
 - ZeroPolicy: Passive/do-nothing lower anchor

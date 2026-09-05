@@ -36,9 +36,13 @@ tasks:
   - medium
   - hard
 
+base_url: "http://localhost:7860"
+env_id: "ADCTM-v1"
+
 metadata:
   difficulty: "variable"
   domain: "engineering"
-  base_url: null
-  env_id: null
+  base_url: "http://localhost:7860"
+  env_id: "ADCTM-v1"
+
 

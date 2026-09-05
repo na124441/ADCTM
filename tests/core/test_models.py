@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from pydantic import ValidationError
 
 from core.models import Action, InfoDict, Observation, Reward

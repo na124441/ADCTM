@@ -1,4 +1,4 @@
-﻿from typing import List, Dict
+from typing import List, Dict
 
 def evaluate_action_quality(temps: List[float], actions: List[float], deltas: List[float], safe_temp: float) -> List[str]:
     """Assesses the quality of agent cooling actions relative to thermal urgency."""

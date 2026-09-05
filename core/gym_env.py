@@ -1,4 +1,4 @@
-﻿"""
+"""
 Standard Gymnasium Environment wrapper for ADCTM.
 Exposes standard Box observation and action spaces for RL algorithms (PPO, SAC, TD3)
 and wraps the in-process SimulationSession physics cleanly.

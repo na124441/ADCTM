@@ -1,4 +1,4 @@
-﻿import app as app_entry
+import app as app_entry
 import server.app
 
 

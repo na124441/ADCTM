@@ -1,1 +1,1 @@
-﻿# Configuration package for simulation constants and metadata.
+# Configuration package for simulation constants and metadata.

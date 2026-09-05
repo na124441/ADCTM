@@ -51,7 +51,8 @@ def parse_llm_response(response_text: str, expected_num_zones: int) -> Action:
 
     if not isinstance(data, dict) or "cooling" not in data:
         snippet = response_text[:120].replace("\n", " ")
-        raise ValueError(f"No valid JSON containing 'cooling' key found in model response: '{snippet}'")
+        raise ValueError(f"No JSON found with valid 'cooling' key in model response: '{snippet}'")
+
 
     cooling_list = data.get("cooling")
     if not isinstance(cooling_list, list) or len(cooling_list) != expected_num_zones:

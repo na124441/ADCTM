@@ -1,4 +1,4 @@
-﻿from rich.panel import Panel
+from rich.panel import Panel
 
 from ui.panels.analysis import (
     render_action_quality_panel,

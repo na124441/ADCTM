@@ -1,4 +1,4 @@
-﻿from analysis.policy_analyzer import assess_policy_type, evaluate_action_quality
+from analysis.policy_analyzer import assess_policy_type, evaluate_action_quality
 
 
 def test_evaluate_action_quality_covers_urgent_cases():

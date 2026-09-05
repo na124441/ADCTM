@@ -1,4 +1,4 @@
-﻿from config.constants import ALPHA, BETA, GAMMA
+from config.constants import ALPHA, BETA, GAMMA
 
 
 def test_constants_are_positive_numeric():

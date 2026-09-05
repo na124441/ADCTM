@@ -1,1 +1,1 @@
-﻿# ADCTMS Inference Tests Package
+# ADCTMS Inference Tests Package

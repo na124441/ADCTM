@@ -1,1 +1,1 @@
-﻿# ADCTMS Core Package
+# ADCTMS Core Package

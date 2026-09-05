@@ -1,1 +1,1 @@
-﻿# ADCTMS Analysis Package
+# ADCTMS Analysis Package

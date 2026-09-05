@@ -1,1 +1,1 @@
-﻿# ADCTMS Dynamics Tests Package
+# ADCTMS Dynamics Tests Package

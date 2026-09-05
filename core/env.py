@@ -250,6 +250,53 @@ def get_score(
         return session.get_score()
 
 
+@app.get("/metrics")
+def get_metrics(
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """
+    Returns real-time operational metrics for dashboard visualization.
+    """
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+    session = _get_session(active_session_id)
+    s_lock = _get_or_create_lock(active_session_id)
+    with s_lock:
+        if len(session.history_actions) == 0:
+            return {
+                "safety_score": "100.0%",
+                "efficiency": 0.0,
+                "score": 0.0,
+                "metrics": {"safety": 1.0, "precision": 1.0, "efficiency": 1.0, "smoothness": 1.0}
+            }
+        score_data = session.get_score()
+        m = score_data.get("metrics", {})
+        return {
+            "safety_score": f"{m.get('safety', 1.0) * 100:.1f}%",
+            "efficiency": round(m.get("efficiency", 0.0) * 100, 1),
+            "score": score_data.get("score", 0.0),
+            "metrics": m,
+        }
+
+
+@app.get("/zones")
+def get_zones(
+    session_id: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """
+    Returns zone metadata for active session layout.
+    """
+    active_session_id = _resolve_session_id(session_id_query=session_id)
+    session = _get_session(active_session_id)
+    s_lock = _get_or_create_lock(active_session_id)
+    with s_lock:
+        return {
+            "num_zones": session.config.num_zones,
+            "target_temperature": session.config.target_temperature,
+            "safe_temperature": session.config.safe_temperature,
+        }
+
+
+
 @app.post("/simulate")
 def simulate(
     task_name: str = "easy", 

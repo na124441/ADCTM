@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from inference.parser import parse_llm_response
 

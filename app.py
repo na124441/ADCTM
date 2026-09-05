@@ -1,4 +1,4 @@
-﻿"""
+"""
 Main entry point for the ADCTM (Autonomous Data Centre Thermal Management) application.
 This script simply imports the FastAPI application instance and the main execution 
 function from the `server.app` module, acting as a convenient top-level wrapper.

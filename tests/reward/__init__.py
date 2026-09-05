@@ -1,1 +1,1 @@
-﻿# ADCTMS Reward Tests Package
+# ADCTMS Reward Tests Package

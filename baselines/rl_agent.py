@@ -1,4 +1,4 @@
-﻿"""
+"""
 RL Agent baseline wrapper for inference and benchmarking.
 Loads trained Stable-Baselines3 PPO model and interfaces with ADCTM tasks.
 """

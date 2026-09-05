@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test runner script for the ADCTM project.
 This script sets up the local environment specifically for running pytest
 and provides an entry point to seamlessly trigger the test suite.

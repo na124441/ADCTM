@@ -1,4 +1,4 @@
-﻿"""
+"""
 Main entry point for the ADCTM OpenEnv Server.
 Exposes the mandatory OpenEnv REST API: /reset, /step, and /state.
 """

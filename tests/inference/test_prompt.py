@@ -1,4 +1,4 @@
-﻿from inference.prompt import build_prompt, build_zone_table
+from inference.prompt import build_prompt, build_zone_table
 
 
 def test_build_zone_table_contains_one_row_per_zone(observation):

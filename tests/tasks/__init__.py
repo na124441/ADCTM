@@ -1,1 +1,1 @@
-﻿# ADCTMS Tasks Tests Package
+# ADCTMS Tasks Tests Package

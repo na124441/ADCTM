@@ -1,4 +1,4 @@
-﻿# tasks/task_config.py
+# tasks/task_config.py
 from pydantic import BaseModel, Field, model_validator
 from pydantic import ConfigDict
 from typing import List, Optional

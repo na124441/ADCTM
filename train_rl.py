@@ -1,4 +1,4 @@
-﻿"""
+"""
 RL Training Script for ADCTM.
 Trains continuous PPO agents using Stable-Baselines3 on the ADCTMGymEnv environment.
 Saves model checkpoints to models/ppo_<task>.zip

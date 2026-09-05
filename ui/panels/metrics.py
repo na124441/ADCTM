@@ -1,4 +1,4 @@
-﻿from rich.panel import Panel
+from rich.panel import Panel
 from rich.align import Align
 from rich.text import Text
 from rich import box

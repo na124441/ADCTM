@@ -1,1 +1,1 @@
-﻿# ADCTMS Server Tests Package
+# ADCTMS Server Tests Package

@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from core.models import Reward
 from core.simulator import SimulationSession
