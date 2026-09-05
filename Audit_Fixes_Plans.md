@@ -1092,6 +1092,107 @@ Keep synchronized with `pyproject.toml`.
 2. Run `pytest tests/test_submission_readiness.py -v`.
 3. Run full regression test suite.
 
+**Status**: ✅ **Completed & Verified**
+- Synchronized `pyproject.toml` dependencies with `openenv-core` and added `[project.optional-dependencies] test`.
+- Full regression suite passed (39/39 tests passing).
+
+---
+
+### 15. Fix Plan for M5: Oversimplified Flawed Trend Prediction Mathematics
+
+#### Overview
+In `analysis/trend_predictor.py` (lines 13–20):
+```python
+# Calculate average velocity over the window
+deltas = []
+for i in range(1, window):
+    prev = history[-(i+1)][z_idx]
+    curr = history[-i][z_idx]
+    deltas.append(curr - prev)
+    
+avg_velocity = sum(deltas) / len(deltas)
+```
+Notice what happens when summing adjacent differences of a discrete series:
+$$\sum_{i=1}^{k} (x_i - x_{i-1}) = x_k - x_0$$
+All intermediate temperature readings algebraically cancel out!
+Dividing by $(k-1)$ reduces the "average velocity" purely to $\frac{x_k - x_0}{k-1}$, rendering the predictor mathematically equivalent to drawing a single chord between the first and last point of the window. Any non-linear thermal acceleration, sudden spike in the middle of the window, or recent deceleration is completely ignored.
+
+#### Architecture of Solution
+```
+[Telescoping Cancellation: Chord Only]
+History = [70, 75, 82, 84, 85]
+Sum of deltas cancels intermediate points: (85 - 70) / 4 = 3.75
+Blind to curvature or exponential runaway!
+
+                               │
+                               ▼  REMEDIATION
+[Ordinary Least Squares (OLS) Linear Regression / Robust Trend Estimation]
+Given window observations y = [y_0, y_1, ..., y_{k-1}] at time steps x = [0, 1, ..., k-1]:
+Slope (velocity) via closed-form OLS:
+  beta = Cov(x, y) / Var(x) = sum((x_i - x_mean) * (y_i - y_mean)) / sum((x_i - x_mean)^2)
+1. Accounts for every intermediate observation with statistical weighting.
+2. Outlier-resistant and captures real trajectory acceleration.
+3. If slope > 0, project steps to critical threshold: (safe_temp - current_temp) / slope.
+```
+
+#### Detailed File Changes
+
+##### 1. `analysis/trend_predictor.py` (MODIFY)
+Implement OLS closed-form slope estimation across the rolling window:
+```python
+import numpy as np
+from typing import List
+
+def predict_thermal_future(
+    temps: List[float], 
+    history: List[List[float]], 
+    safe_temp: float, 
+    window: int = 5
+) -> List[str]:
+    """
+    Predicts time-to-violation for each zone based on robust rolling linear regression.
+    Uses OLS slope over the rolling history window to incorporate all intermediate points.
+    """
+    num_zones = len(temps)
+    if len(history) < window:
+        return ["Initializing..." for _ in temps]
+        
+    recent_history = np.array(history[-window:])  # shape: (window, num_zones)
+    x = np.arange(window)
+    x_mean = np.mean(x)
+    x_var = np.sum((x - x_mean) ** 2)
+
+    forecasts = []
+    for z_idx in range(num_zones):
+        current_temp = temps[z_idx]
+        y = recent_history[:, z_idx]
+        y_mean = np.mean(y)
+        
+        # Closed-form OLS slope (velocity in °C/step)
+        velocity = np.sum((x - x_mean) * (y - y_mean)) / x_var
+        
+        if velocity <= 0.05:  # Flat or cooling
+            forecasts.append("Stable/Cooling")
+        else:
+            steps_to_critical = (safe_temp - current_temp) / velocity
+            if steps_to_critical < 0:
+                forecasts.append("CRITICAL")
+            elif steps_to_critical < 1.0:
+                forecasts.append("< 1 step ⚠️")
+            else:
+                forecasts.append(f"~{int(np.ceil(steps_to_critical))} steps")
+                
+    return forecasts
+```
+
+##### 2. `tests/analysis/test_trend_predictor.py` (MODIFY)
+Add curvature sensitivity test verifying that an accelerating trajectory yields a higher slope than a decelerating one having the same endpoints.
+
+#### Verification & Testing
+1. Run `pytest tests/analysis/test_trend_predictor.py -v`.
+2. Run full regression test suite.
+
+
 
 
 

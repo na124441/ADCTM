@@ -196,12 +196,15 @@ This document serves as the master register of all material engineering, ML/RL, 
 ---
 
 
-#### Problem ID: M4 — Dependency Specification Conflicts and Missing Locks
+#### Problem ID: M4 — Dependency Specification Conflicts and Missing Locks ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
 - **Subsystem**: `pyproject.toml`, `requirements.txt`
+- **Status**: ✅ RESOLVED — Harmonized `openenv-core` and `ollama` across `pyproject.toml` and `requirements.txt`. Added `[project.optional-dependencies] test = ["pytest>=8.0.0", "pytest-cov"]` to `pyproject.toml`.
 - **Problem**: `requirements.txt` specifies `openenv-core`, while `pyproject.toml` specifies `openenv`. Version numbers are loosely bounded (`>=`), and `pytest` is omitted from `pyproject.toml`.
+- **Why it matters**: Inconsistent package definitions break packaging, CI pipelines, and standard pip installs across different container environments.
 
 ---
+
 
 #### Problem ID: M5 — Oversimplified Flawed Trend Prediction Mathematics
 - **Severity**: 🟡 MEDIUM
