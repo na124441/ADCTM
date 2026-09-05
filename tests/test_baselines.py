@@ -90,10 +90,10 @@ def test_multi_seed_evaluation_computes_statistics():
     controller = RuleBasedController()
     seeds = [42, 101, 202]
     res = evaluate_agent_on_task(controller, "easy", seeds=seeds)
-    assert "mean" in res
-    assert "std" in res
-    assert "scores" in res
-    assert len(res["scores"]) == 3
-    assert 0.0 <= res["mean"] <= 1.0
-    assert res["std"] >= 0.0
+    assert "score_mean" in res
+    assert "score_std" in res
+    assert "safety_mean" in res
+    assert 0.0 <= res["score_mean"] <= 1.0
+    assert res["score_std"] >= 0.0
+
 

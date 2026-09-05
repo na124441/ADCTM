@@ -186,12 +186,15 @@ This document serves as the master register of all material engineering, ML/RL, 
 ---
 
 
-#### Problem ID: M3 — Lack of Multi-Seed Statistical Evaluation
+#### Problem ID: M3 — Lack of Multi-Seed Statistical Evaluation ✅ RESOLVED
 - **Severity**: 🟡 MEDIUM
-- **Subsystem**: Evaluation workflows, `sample_run.py`
+- **Subsystem**: Evaluation workflows, `sample_run.py`, `run_benchmark.py`
+- **Status**: ✅ RESOLVED — Created `run_benchmark.py` running multi-seed statistical evaluation (mean ± std) across 5 control paradigms. Extended `sample_run.py` with CLI flags (`--seeds`, `--num-seeds`, `--task`) enabling multi-seed statistical rollouts over HTTP. Added unit test `test_multi_seed_evaluation_computes_statistics` in `tests/test_baselines.py`.
 - **Problem**: Benchmarks evaluate exactly one hardcoded seed per task (`101`, `202`, `303`). There is no measurement of policy variance, confidence intervals, or performance across randomized seeds.
+- **Why it matters**: A single deterministic seed cannot measure controller robustness or volatility resilience, risking overfitting or lucky rollouts.
 
 ---
+
 
 #### Problem ID: M4 — Dependency Specification Conflicts and Missing Locks
 - **Severity**: 🟡 MEDIUM

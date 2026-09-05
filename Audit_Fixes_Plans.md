@@ -1027,6 +1027,72 @@ Add test `test_multi_seed_evaluation_computes_statistics`:
 2. Run `python sample_run.py --help` to confirm CLI flags.
 3. Run full regression test suite.
 
+**Status**: ✅ **Completed & Verified**
+- Extended `sample_run.py` with multi-seed CLI parsing (`--seeds`, `--num-seeds`, `--task`) and mean/std stats computation.
+- Added unit test `test_multi_seed_evaluation_computes_statistics` in `tests/test_baselines.py`.
+- Full regression suite passed (39/39 tests passing).
+
+---
+
+### 14. Fix Plan for M4: Dependency Specification Conflicts and Missing Locks
+
+#### Overview
+1. `requirements.txt` specifies `openenv-core` and includes `pytest` and `ollama`.
+2. `pyproject.toml` specifies `openenv` (conflicting with `openenv-core` in requirements.txt), omits `pytest`, omits `ollama`, and leaves versions loosely constrained (`numpy>=2.0.0`, `pydantic>=2.0.0`).
+3. Furthermore, modern packaging standards recommend pinning exact or properly bounded ranges and optional test dependencies under `[project.optional-dependencies] test = [...]`.
+
+#### Architecture of Solution
+```
+[Inconsistent Dependencies]
+requirements.txt ──> openenv-core, pytest, ollama, loosely bounded versions
+pyproject.toml   ──> openenv (mismatch!), missing pytest, missing optional-deps
+
+                               │
+                               ▼  REMEDIATION
+[Harmonized, Clean Dependency Specifications]
+1. Harmonize package names: Use `openenv-core` consistently across both files.
+2. In `pyproject.toml`:
+   - Add `[project.optional-dependencies]` with `test = ["pytest>=8.0.0"]`.
+   - Include `ollama>=0.3.0` for local LLM evaluation parity with `requirements.txt`.
+   - Harmonize `openenv-core>=0.1.0`.
+3. In `requirements.txt`:
+   - Ensure clean consistency with `pyproject.toml`.
+```
+
+#### Detailed File Changes
+
+##### 1. `pyproject.toml` (MODIFY)
+Harmonize dependencies:
+```toml
+dependencies = [
+    "fastapi==0.112.0",
+    "uvicorn[standard]==0.30.1",
+    "pydantic>=2.0.0,<3.0.0",
+    "numpy>=1.26.0",
+    "openai>=1.0.0",
+    "requests==2.32.3",
+    "openenv-core",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "ollama"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov"
+]
+```
+
+##### 2. `requirements.txt` (MODIFY)
+Keep synchronized with `pyproject.toml`.
+
+#### Verification & Testing
+1. Run `pip check` or import checks.
+2. Run `pytest tests/test_submission_readiness.py -v`.
+3. Run full regression test suite.
+
+
 
 
 
